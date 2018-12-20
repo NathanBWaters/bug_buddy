@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+from bug_buddy.commands import analyze, generate, initialize
+
+
+def _analyze(args):
+    '''
+    Parses arguments and passes them to the analyze subcommand module
+
+    @param args: the argparse arguments
+    '''
+    analyze(args.repository)
+
+
+def _generate(args):
+    '''
+    Parses arguments and passes them to the generate subcommand module
+
+    @param args: the argparse arguments
+    '''
+    generate(args.repository)
+
+
+def _initialize(args):
+    '''
+    Parses arguments and passes them to the initialize subcommand module
+
+    @param args: the argparse arguments
+    '''
+    initialize(args.path)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Utilities for working with BugBuddy')
+    subparsers = parser.add_subparsers()
+
+    ###################################
+    #  Analyze SubCommand
+    ###################################
+    analyze_command = subparsers.add_parser(
+        'analyze',
+        description='Used for analyzing code repository',
+        help='The analyze subcommand will kick off the process of retrieving '
+             'the historical data of a code repository')
+    analyze_command.set_defaults(func=_analyze)
+    analyze_command.add_argument(
+        'repository',
+        type=str,
+        help='Url of the repository to be analyzed')
+
+    ###################################
+    #  Generate SubCommand
+    ###################################
+    generate_command = subparsers.add_parser(
+        'generate',
+        description='Generate synthetic test runs',
+        help='The generate subcommand will kick off the process of retrieving '
+             'the historical data of a code repository')
+    generate_command.set_defaults(func=_generate)
+    generate_command.add_argument(
+        'repository',
+        type=str,
+        help='Name of the repository to generate synthetic data for')
+
+    ###################################
+    #  Initialize SubCommand
+    ###################################
+    initialize_command = subparsers.add_parser(
+        'initialize',
+        description='Initializes a repository given a path',
+        help=('The initialize subcommand will initialize a repository to be '
+              'used by bug_buddy'))
+    initialize_command.set_defaults(func=_initialize)
+    initialize_command.add_argument(
+        'path',
+        type=str,
+        help='Path to the repository you want to initialize')
+
+    args = parser.parse_args()
+    args.func(args)

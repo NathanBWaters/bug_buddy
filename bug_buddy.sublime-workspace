@@ -1,0 +1,304 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+			[
+				"Repo",
+				"repository"
+			],
+			[
+				"fil",
+				"FileWrapper"
+			],
+			[
+				"file",
+				"file_char"
+			],
+			[
+				"mall",
+				"malloc_output"
+			],
+			[
+				"bzier",
+				"bezier_curve"
+			],
+			[
+				"sub",
+				"subsample_and_conversion"
+			],
+			[
+				"base",
+				"base_model"
+			],
+			[
+				"model",
+				"model_data"
+			],
+			[
+				"Answer",
+				"AnswerInput"
+			],
+			[
+				"question",
+				"question_data"
+			],
+			[
+				"que",
+				"question_data"
+			],
+			[
+				"quiz",
+				"quiz_data"
+			],
+			[
+				"creator",
+				"creator_id"
+			],
+			[
+				"creato",
+				"creator_id"
+			],
+			[
+				"Create",
+				"CreateQuiz"
+			],
+			[
+				"Sql",
+				"SQLAlchemyObjectType"
+			]
+		]
+	},
+	"build_system": "",
+	"build_system_choices":
+	[
+	],
+	"build_varint": "",
+	"command_palette":
+	{
+		"height": 119.0,
+		"last_filter": "",
+		"selected_items":
+		[
+			[
+				"Package Control: instal",
+				"Package Control: Install Package"
+			],
+			[
+				"Package Control: insta",
+				"Package Control: Install Package"
+			],
+			[
+				"Package Control: install",
+				"Package Control: Install Package"
+			]
+		],
+		"width": 392.0
+	},
+	"console":
+	{
+		"height": 0.0,
+		"history":
+		[
+		]
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"file_history":
+	[
+		"/Users/NathanBWaters/code/BugBuddy/bug_buddy/analyze/__init__.py",
+		"/Users/NathanBWaters/code/BugBuddy/bug_buddy.sublime-project",
+		"/Users/NathanBWaters/code/BugBuddy/bug_buddy/database/schema.py",
+		"/Users/NathanBWaters/code/BugBuddy/bug_buddy/commands/alteration.py",
+		"/Users/NathanBWaters/code/BugBuddy/bug_buddy/commands/analyze.py",
+		"/Users/NathanBWaters/code/BugBuddy/bug_buddy/database/db.py",
+		"/Users/NathanBWaters/code/BugBuddy/bin/bugbuddy",
+		"/Users/NathanBWaters/Library/Application Support/Sublime Text 3/Packages/Python Flake8 Lint/Flake8Lint.sublime-settings",
+		"/Users/NathanBWaters/Library/Application Support/Sublime Text 3/Packages/User/Flake8Lint.sublime-settings",
+		"/Users/NathanBWaters/Library/Application Support/Sublime Text 3/Packages/Package Control/Package Control.sublime-settings",
+		"/Users/NathanBWaters/code/BugBuddy/requirements.txt",
+		"/Users/NathanBWaters/code/BugBuddy/bug_buddy/commands/__init__.py",
+		"/Users/NathanBWaters/code/BugBuddy/bug_buddy/database/__init__.py",
+		"/Users/NathanBWaters/code/BugBuddy/setup.py",
+		"/Users/NathanBWaters/code/jayquiz-backend/jayquiz/api/__init__.py",
+		"/Users/NathanBWaters/code/jayquiz-backend/bin/server.py",
+		"/Users/NathanBWaters/code/jayquiz-backend/jayquiz/api/query.py",
+		"/Users/NathanBWaters/code/jayquiz-backend/jayquiz/api/models.py",
+		"/Users/NathanBWaters/code/jayquiz-backend/jayquiz/api/mutations.py",
+		"/Users/NathanBWaters/code/jayquiz-backend/requirements.txt",
+		"/Users/NathanBWaters/code/jayquiz-backend/jayquiz/api/server.py",
+		"/Users/NathanBWaters/code/jayquiz-backend/jayquiz/db/schema.py",
+		"/Users/NathanBWaters/code/jayquiz-backend/jayquiz/db/database.py",
+		"/Users/NathanBWaters/code/jayquiz-backend/jayquiz/__init__.py",
+		"/Users/NathanBWaters/code/jayquiz-backend/setup.py",
+		"/Users/NathanBWaters/code/jayquiz-backend/jayquiz/db/endpoints.py",
+		"/Users/NathanBWaters/code/jayquiz-backend/README.md",
+		"/Users/NathanBWaters/code/jayquiz-backend/setup.cfg",
+		"/Users/NathanBWaters/code/jayquiz-backend/jayquiz/bin/server.py",
+		"/Users/NathanBWaters/code/outfitr_renderer/src/go_stop.xcodeproj/project.xcworkspace/xcuserdata/NathanBWaters.xcuserdatad/UserInterfaceState.xcuserstate",
+		"/Users/NathanBWaters/code/outfitr_renderer/src/go_stop.xcodeproj/project.xcworkspace/xcuserdata/nwaters.xcuserdatad/UserInterfaceState.xcuserstate",
+		"/Users/NathanBWaters/code/outfitr_renderer/src/main.cpp",
+		"/Users/NathanBWaters/code/outfitr_renderer/src/main2.cpp",
+		"/Users/NathanBWaters/code/outfitr_renderer/src/mesh/mesh.hpp",
+		"/Users/NathanBWaters/code/outfitr_renderer/src/model/model.hpp",
+		"/Users/NathanBWaters/code/outfitr_renderer/src/scene_object/scene_object.hpp",
+		"/Users/NathanBWaters/code/outfitr_renderer/README.md",
+		"/Users/NathanBWaters/code/outfitr_renderer_old/go_stop/go_stop/main.cpp",
+		"/Users/NathanBWaters/code/outfitr_renderer_old/go_stop/go_stop/scene_object/scene_object.cpp",
+		"/Users/NathanBWaters/code/outfitr_renderer_old/go_stop/go_stop/skybox/skybox.cpp",
+		"/Users/NathanBWaters/code/outfitr_renderer_old/go_stop/go_stop/framebuffer/framebuffer.cpp",
+		"/Users/NathanBWaters/code/outfitr_renderer_old/go_stop/go_stop/Camera.hpp",
+		"/Users/NathanBWaters/code/outfitr_renderer_old/go_stop/go_stop/model/model.cpp",
+		"/Users/NathanBWaters/code/outfitr_renderer_old/go_stop/go_stop/point_light/point_light.cpp",
+		"/Users/NathanBWaters/code/outfitr/app.json",
+		"/Users/NathanBWaters/code/outfitr/package.json",
+		"/Users/NathanBWaters/code/jayquiz/node_modules/xtend/package.json",
+		"/Users/NathanBWaters/code/jayquiz/node_modules/y18n/package.json",
+		"/Users/NathanBWaters/code/jayquiz/node_modules/yargs/package.json",
+		"/Users/NathanBWaters/code/jayquiz/node_modules/yesno/package.json",
+		"/Users/NathanBWaters/code/jayquiz/package.json",
+		"/Users/NathanBWaters/code/jayquiz/components/Profile/MBTI/index.js",
+		"/Users/NathanBWaters/code/jayquiz/components/Profile/ProfilePic/index.js",
+		"/Users/NathanBWaters/code/jayquiz/components/Quiz/Results/index.js",
+		"/Users/NathanBWaters/code/jayquiz/README.md",
+		"/Users/NathanBWaters/code/jayquiz/.gitignore",
+		"/Users/NathanBWaters/code/jwuiz/components/Navbar/index.js",
+		"/Users/NathanBWaters/code/jwuiz/components/Profile/index.js",
+		"/Users/NathanBWaters/code/jwuiz/components/Quiz/index.js",
+		"/Users/NathanBWaters/code/jwuiz/package.json",
+		"/Users/NathanBWaters/code/jwuiz/components/Quiz/Question/index.js",
+		"/Users/NathanBWaters/code/jwuiz/App.js",
+		"/Users/NathanBWaters/code/jwuiz/components/Discover/index.js",
+		"/Users/NathanBWaters/code/jwuiz/components/Quiz/Results/index.js",
+		"/Users/NathanBWaters/code/jwuiz/components/Discover/QuizItem/index.js",
+		"/Users/NathanBWaters/code/jwuiz/components/Discover/FeaturedQuizzes/index.js",
+		"/Users/NathanBWaters/code/jwuiz/components/QuizItem/index.js",
+		"/Users/NathanBWaters/code/jwuiz/components/Quiz/QuizItem/index.js",
+		"/Users/NathanBWaters/code/jwuiz/components/Discover/QuizList/index.js",
+		"/Users/NathanBWaters/code/jwuiz/components/Splash/index.js"
+	],
+	"find":
+	{
+		"height": 26.0
+	},
+	"find_in_files":
+	{
+		"height": 101.0,
+		"where_history":
+		[
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": false,
+		"find_history":
+		[
+			"repository",
+			"Step",
+			" Analyzing Step",
+			"Step",
+			" Analyzing Step",
+			" Step",
+			"def __init__("
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": false,
+		"replace_history":
+		[
+		],
+		"reverse": false,
+		"show_context": true,
+		"use_buffer2": true,
+		"whole_word": false,
+		"wrap": true
+	},
+	"incremental_find":
+	{
+		"height": 26.0
+	},
+	"input":
+	{
+		"height": 38.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"output.find_results":
+	{
+		"height": 0.0
+	},
+	"pinned_build_system": "",
+	"replace":
+	{
+		"height": 48.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_symbol":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"settings":
+	{
+	},
+	"show_minimap": true,
+	"show_open_files": false,
+	"show_tabs": true,
+	"side_bar_visible": true,
+	"side_bar_width": 258.0,
+	"status_bar_visible": true,
+	"template_settings":
+	{
+	}
+}
