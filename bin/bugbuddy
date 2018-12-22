@@ -13,7 +13,7 @@ def _analyze(args):
 
     @param args: the argparse arguments
     '''
-    analyze(args.repository)
+    analyze(args.path)
 
 
 def _generate(args):
@@ -31,26 +31,15 @@ def _initialize(args):
 
     @param args: the argparse arguments
     '''
-    initialize(args.path)
+    initialize(path=args.path,
+               initialize_commands=args.initialize_commands,
+               test_commands=args.test_commands,
+               src_directory=args.source_directory)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Utilities for working with BugBuddy')
     subparsers = parser.add_subparsers()
-
-    ###################################
-    #  Analyze SubCommand
-    ###################################
-    analyze_command = subparsers.add_parser(
-        'analyze',
-        description='Used for analyzing code repository',
-        help='The analyze subcommand will kick off the process of retrieving '
-             'the historical data of a code repository')
-    analyze_command.set_defaults(func=_analyze)
-    analyze_command.add_argument(
-        'repository',
-        type=str,
-        help='Url of the repository to be analyzed')
 
     ###################################
     #  Generate SubCommand
@@ -65,6 +54,12 @@ if __name__ == '__main__':
         'repository',
         type=str,
         help='Name of the repository to generate synthetic data for')
+    generate_command.add_argument(
+        '-n',
+        '--num-runs',
+        type=str,
+        help='The number of synthetic edits and test runs you want to perform. '
+             'If blank, it will continuously run in perpetuity.')
 
     ###################################
     #  Initialize SubCommand
@@ -79,6 +74,21 @@ if __name__ == '__main__':
         'path',
         type=str,
         help='Path to the repository you want to initialize')
+    initialize_command.add_argument(
+        '-i',
+        '--initialize-commands',
+        type=str,
+        help='Commands to initialize your project and set up its environment')
+    initialize_command.add_argument(
+        '-t',
+        '--test-commands',
+        type=str,
+        help='Set of commands to run the test from the root of your project')
+    initialize_command.add_argument(
+        '-s',
+        '--source-directory',
+        type=str,
+        help='The subdirectory of your project that contains your project files')
 
     args = parser.parse_args()
     args.func(args)

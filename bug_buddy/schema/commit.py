@@ -7,6 +7,7 @@ from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
+from bug_buddy.constants import FAILURE
 from bug_buddy.schema.base import Base
 from bug_buddy.schema.repository import Repository
 
@@ -28,5 +29,16 @@ class Commit(Base):
         '''
         Creates a new TestResults instance
         '''
-        self.commit_id = commit_id
         self.repository = repository
+        self.commit_id = commit_id
+
+    def causes_test_failures(self):
+        '''
+        Returns a bool if the commit causes any test failures
+        '''
+        for test_run in self.test_runs:
+            for test_result in test_run.test_results:
+                if test_result.status == FAILURE:
+                    return True
+
+        return False

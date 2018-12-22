@@ -7,7 +7,6 @@ from sqlalchemy.orm import sessionmaker
 
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.schema import Base, Repository
-from bug_buddy.vcs.git_utils import get_name_from_url
 
 
 # Create an engine that stores data in the local directory's
@@ -38,7 +37,7 @@ def create(sql_class, **kwargs):
     '''
     session = Session()
     new_class_instance = sql_class(**kwargs)
-    session.add(new_class_instance)
+    session.merge(new_class_instance)
     session.commit()
     return new_class_instance
 

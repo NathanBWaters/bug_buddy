@@ -8,14 +8,14 @@ from sqlalchemy.orm import relationship
 
 from bug_buddy.schema.base import Base
 from bug_buddy.schema.test import Test
-from bug_buddy.schema.commit import Commit
+from bug_buddy.schema.test_run import TestRun
 
 
 class TestResult(Base):
     '''
     Schema representation of a test result.  Links a Test with a run, which
-    further links to the code.  Stores whether or not the test failed for that
-    run
+    further links to the code.  Stores whether or not the test passed/failed for
+    that run
     '''
     __tablename__ = 'test_result'
     id = Column(Integer, primary_key=True)
@@ -28,9 +28,10 @@ class TestResult(Base):
     # Whether or not the test passed or failed
     status = Column(String, nullable=False)
 
-    def __init__(self, test: Test, commit: Commit):
+    def __init__(self, test: Test, test_run: TestRun, status: str):
         '''
         Creates a new TestResults instance
         '''
         self.test = test
-        self.commit = commit
+        self.test_run = test_run
+        self.status = status

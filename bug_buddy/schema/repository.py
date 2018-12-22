@@ -10,7 +10,6 @@ from sqlalchemy.orm import relationship
 from bug_buddy.constants import FILE_TYPES
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.schema.base import Base
-from bug_buddy.vcs.git_utils import get_name_from_url
 # from bug_buddy.schema.commit import Commit
 
 
@@ -35,8 +34,13 @@ class Repository(Base):
     # future.  Or it should be saved on a per-machine basis in the database.
     path = Column(String(500), nullable=False)
 
+    # The set of shell commands to intialize the repository
+    initialize_commands = Column(String(500), nullable=False)
     # The set of shell commands to run the tests
-    test_command = Column(String(500), nullable=False)
+    test_commands = Column(String(500), nullable=False)
+
+    # the directory that contains the src files
+    src_directory = Column(String(500), nullable=False)
 
     commits = relationship(
         'Commit',
@@ -53,47 +57,33 @@ class Repository(Base):
                  name: str,
                  url: str,
                  path: str,
-                 test_command: str):
+                 initialize_commands: str,
+                 test_commands: str,
+                 src_directory: str):
         '''
         Creates a new Repository instance.
         '''
         self.name = name
         self.url = url
-        self.test_command = test_command
+        self.initialize_commands = initialize_commands
+        self.test_commands = test_commands
         self.path = path
+        self.src_directory = src_directory
 
     @property
-    def path(self):
+    def src_path(self):
         '''
-        Path to the repository.  If it does not already exist, it will clone
-        it locally.
+        Returns the absolute path to the directory that contains the source
+        files
         '''
-        if not self._path:
-            self._path = self.clone_locally()
+        return os.path.join(self.path, self.src_directory)
 
-        return self._path
-
-    def clone_locally(self):
+    def get_src_files(self, filter_file_type=None) -> dict:
         '''
-        Clones the repository locally
-
-        @return: path to the cloned repository
+        Returns a list of source files
         '''
-        print('Implement clone_locally')
-        assert False
-
-    def get_files(self, commit=None, filter_file_type=None) -> dict:
-        '''
-        Returns a list of files
-        '''
-        if commit:
-            self.set_repo_to_commit(commit)
-
-        if not self.repository_files:
-            self.save_files()
-
         repository_files = []
-        for dirname, _, file_names in os.walk(self.repository_path):
+        for dirname, _, file_names in os.walk(self.src_path):
             for file_name in file_names:
                 # client can request a specific file type such as only Python
                 # files
@@ -101,30 +91,16 @@ class Repository(Base):
                     if not file_name.endswith(FILE_TYPES[filter_file_type]):
                         continue
 
-                absolute_path = os.path.join(self.repository_path,
+                absolute_path = os.path.join(self.src_path,
                                              dirname,
                                              file_name)
                 repository_files.append(absolute_path)
 
         return repository_files
 
-    def set_repo_to_commit(self, commit):
-        '''
-        Sets the respoitory to match a commit
-        '''
-        print('Implement set_repo_to_commit')
-        assert False
-
-    def reset_repo(self):
-        '''
-        Resets the repository to master/latest
-        '''
-        print('Implement reset_repo')
-        assert False
-
     def __repr__(self):
         '''
         Converts the repository into a string
         '''
-        return ('<Repository {name} | {path} />'
-                .format(name=self.name, path=self.path))
+        return ('<Repository {id} | {name} | {path} />'
+                .format(id=self.id, name=self.name, path=self.path))

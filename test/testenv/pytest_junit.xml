@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite errors="0" failures="1" name="pytest" skips="12" tests="506" time="11.202">
+   <testcase classname="tests.test_appctx" file="tests/test_appctx.py" line="16" name="test_basic_url_generation" time="0.0203199386597" />
+   <testcase classname="tests.test_appctx" file="tests/test_appctx.py" line="142" name="test_app_ctx_globals_methods" time="0.0159919261932" />
+   <testcase classname="tests.test_basic" file="tests/test_basic.py" line="1918" name="test_run_from_config[localhost-80-localhost-80]" time="0.0164592266083">
+      <system-out>* Serving Flask app "flask_test" (lazy loading)
+ * Environment: production
+   WARNING: Do not use the development server in a production environment.
+   Use a production WSGI server instead.
+ * Debug mode: off</system-out>
+   </testcase>
+   <testcase classname="tests.test_basic" file="tests/test_basic.py" line="1934" name="test_max_cookie_size" time="0.0188400745392" />
+   <testcase classname="tests.test_blueprints" file="tests/test_blueprints.py" line="21" name="test_blueprint_specific_error_handling" time="0.0266497135162">
+      <failure message="assert False">app = &lt;Flask 'flask_test'&gt;, client = &lt;FlaskClient &lt;Flask 'flask_test'&gt;&gt;
+
+    def test_blueprint_specific_error_handling(app, client):
+        frontend = flask.Blueprint('frontend', __name__)
+        backend = flask.Blueprint('backend', __name__)
+        sideend = flask.Blueprint('sideend', __name__)
+    
+        @frontend.errorhandler(403)
+        def frontend_forbidden(e):
+            return 'frontend says no', 403
+    
+        @frontend.route('/frontend-no')
+        def frontend_no():
+            flask.abort(403)
+    
+        @backend.errorhandler(403)
+        def backend_forbidden(e):
+            assert False
+            return 'backend says no', 403
+    
+        @backend.route('/backend-no')
+        def backend_no():
+            assert False
+            flask.abort(403)
+    
+        @sideend.route('/what-is-a-sideend')
+        def sideend_no():
+            flask.abort(403)
+    
+        app.register_blueprint(frontend)
+        app.register_blueprint(backend)
+        app.register_blueprint(sideend)
+    
+        @app.errorhandler(403)
+        def app_forbidden(e):
+            return 'application itself says no', 403
+    
+        assert client.get('/frontend-no').data == b'frontend says no'
+&gt;       assert client.get('/backend-no').data == b'backend says no'
+
+tests/test_blueprints.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+../../Library/Python/2.7/lib/python/site-packages/werkzeug/test.py:830: in get
+    return self.open(*args, **kw)
+flask/testing.py:200: in open
+    follow_redirects=follow_redirects
+../../Library/Python/2.7/lib/python/site-packages/werkzeug/test.py:803: in open
+    response = self.run_wsgi_app(environ, buffered=buffered)
+../../Library/Python/2.7/lib/python/site-packages/werkzeug/test.py:716: in run_wsgi_app
+    rv = run_wsgi_app(self.application, environ, buffered=buffered)
+../../Library/Python/2.7/lib/python/site-packages/werkzeug/test.py:923: in run_wsgi_app
+    app_rv = app(environ, start_response)
+flask/app.py:2308: in __call__
+    return self.wsgi_app(environ, start_response)
+flask/app.py:2294: in wsgi_app
+    response = self.handle_exception(e)
+flask/app.py:1739: in handle_exception
+    reraise(exc_type, exc_value, tb)
+flask/app.py:2291: in wsgi_app
+    response = self.full_dispatch_request()
+flask/app.py:1814: in full_dispatch_request
+    rv = self.handle_user_exception(e)
+flask/app.py:1718: in handle_user_exception
+    reraise(exc_type, exc_value, tb)
+flask/app.py:1812: in full_dispatch_request
+    rv = self.dispatch_request()
+flask/app.py:1798: in dispatch_request
+    return self.view_functions[rule.endpoint](**req.view_args)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    @backend.route('/backend-no')
+    def backend_no():
+&gt;       assert False
+E       assert False
+
+tests/test_blueprints.py:42: AssertionError</failure>
+   </testcase>
+   <testcase classname="tests.test_blueprints" file="tests/test_blueprints.py" line="61" name="test_blueprint_specific_user_error_handling" time="0.0230629444122" />
+</testsuite>

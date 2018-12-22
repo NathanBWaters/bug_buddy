@@ -7,5 +7,4 @@ from . commit import Commit
 from . repository import Repository
 from . test_result import TestResult
 from . test import Test
-from . test_output import TestOutput
 from . test_run import TestRun
