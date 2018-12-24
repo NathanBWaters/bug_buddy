@@ -16,6 +16,8 @@ Create composition edits:
 This data will be trained upon where we will provide the changes and we already
 know which line is really at fault for a failing test.
 '''
+import inspect
+from importlib.machinery import SourceFileLoader
 import random
 import re
 
@@ -67,13 +69,79 @@ def edit_random_function(repository):
 
     @param repository: the code base we are changing
     '''
-    # collect all the files
+    function_header_regex = re.compile('def \w*\((\w|\s|,|=|\r|\*|\n|^\))*\):')
 
+    # contains the matches across the files
+    matches_dict = {}
+
+    # collect all the files
     repo_files = repository.get_src_files(filter_file_type=PYTHON_FILE_TYPE)
 
-    # choose one file
-    chosen_file = repo_files[random.randint(0, len(repo_files))]
+    for repo_file in repo_files:
+        file_functions = get_functions_from_file(repo_file)
+        with open(repo_file) as current_file:
+            file_content = current_file.read()
+            function_header_matches = re.finditer(
+                function_header_regex,
+                file_content)
+            for match in function_header_matches:
+                key = ('{file}|{starting}|{ending}'
+                       .format(file=repo_file,
+                               starting=match.start(),
+                               ending=match.end()))
+                matches_dict[key] = (match, repo_file)
 
-    function_header_regex = 'def \w*\((\w|\s|,|=|\r|\*|\n|^\))*\):'
-    chosen_file
+    possible_matches = list(matches_dict.keys())
+    import pdb; pdb.set_trace()
+    num_methods = len(possible_matches)
+    seleted_method = possible_matches[random.randint(0, num_methods)]
+    match, file = matches_dict[seleted_method]
+    is_innocuous_change = _add_assert_to_function(match, file)
 
+
+def get_routines_from_file(repo_file):
+    '''
+    Returns the methods and functions from the file
+    '''
+    repo_module = SourceFileLoader(repo_file.split('/')[-1], repo_file).load_module()
+
+    routines = []
+
+    for member_name, member in inspect.getmembers(repo_module):
+        if member_name == '__builtins__':
+            continue
+
+        # get functions
+        if inspect.isfunction(member):
+            routines.append(member)
+
+        # TODO: this should be recursive because you can have nested classes
+        #       even though that is rare
+        if inspect.isclass(member):
+            for class_member_name, class_member in inspect.getmembers(member):
+                # get methods from classes.
+
+                # TODO: I also need to add properties..
+                # isinstance(class_member, property)
+                # unfortunately it does not have a module
+                if (inspect.ismethod(class_member) or
+                        inspect.isfunction(class_member)):
+                    routines.append(class_member)
+
+    routines = [routine for routine in routines if
+                inspect.getmodule(routine) == repo_module]
+    import pdb; pdb.set_trace()
+    return list(set(routines))
+
+
+def _add_assert_to_function(match, repo_file):
+    '''
+    Adds either a assert True or assert False right after the beginning to a
+    method.  Returns whether the change was innocuous or not.
+    '''
+    with open(repo_file) as file:
+        file_content = file.read()
+
+        beginning_index = match.start - 1
+        indent_count = 0
+        # while file_content[beginning_index] != '\n':
