@@ -69,40 +69,25 @@ def edit_random_function(repository):
 
     @param repository: the code base we are changing
     '''
-    function_header_regex = re.compile('def \w*\((\w|\s|,|=|\r|\*|\n|^\))*\):')
-
-    # contains the matches across the files
-    matches_dict = {}
+    # contains the methods/functions across the files
+    routines = []
 
     # collect all the files
     repo_files = repository.get_src_files(filter_file_type=PYTHON_FILE_TYPE)
 
     for repo_file in repo_files:
-        file_functions = get_functions_from_file(repo_file)
-        with open(repo_file) as current_file:
-            file_content = current_file.read()
-            function_header_matches = re.finditer(
-                function_header_regex,
-                file_content)
-            for match in function_header_matches:
-                key = ('{file}|{starting}|{ending}'
-                       .format(file=repo_file,
-                               starting=match.start(),
-                               ending=match.end()))
-                matches_dict[key] = (match, repo_file)
+        routines.extend(get_routines_from_file(repository, repo_file))
 
-    possible_matches = list(matches_dict.keys())
-    import pdb; pdb.set_trace()
-    num_methods = len(possible_matches)
-    seleted_method = possible_matches[random.randint(0, num_methods)]
-    match, file = matches_dict[seleted_method]
-    is_innocuous_change = _add_assert_to_function(match, file)
+    seleted_routine = routines[random.randint(0, len(routines))]
+    _add_assert_to_function(seleted_routine)
 
 
-def get_routines_from_file(repo_file):
+def get_routines_from_file(repository, repo_file):
     '''
     Returns the methods and functions from the file
     '''
+    # first load the entire project
+    import pdb; pdb.set_trace()
     repo_module = SourceFileLoader(repo_file.split('/')[-1], repo_file).load_module()
 
     routines = []
@@ -129,19 +114,18 @@ def get_routines_from_file(repo_file):
                     routines.append(class_member)
 
     routines = [routine for routine in routines if
-                inspect.getmodule(routine) == repo_module]
-    import pdb; pdb.set_trace()
+                inspect.getmodule(routine) == repo_module and
+                inspect.getsourcefile(routine) == repo_file]
     return list(set(routines))
 
 
-def _add_assert_to_function(match, repo_file):
+def _add_assert_to_routine(routine):
     '''
     Adds either a assert True or assert False right after the beginning to a
     method.  Returns whether the change was innocuous or not.
     '''
-    with open(repo_file) as file:
-        file_content = file.read()
-
-        beginning_index = match.start - 1
-        indent_count = 0
-        # while file_content[beginning_index] != '\n':
+    routine_src_code, starting_line = inspect.getsourcelines(routine)
+    repo_file = inspect.getsourcefile(routine)
+    with open(repo_file, 'w') as file:
+        file.seek(starting_line + len(routine_src_code))
+        import pdb; pdb.set_trace()
