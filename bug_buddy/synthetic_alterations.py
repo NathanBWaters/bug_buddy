@@ -17,17 +17,25 @@ This data will be trained upon where we will provide the changes and we already
 know which line is really at fault for a failing test.
 '''
 import inspect
+import importlib
 from importlib.machinery import SourceFileLoader
+import os
 import random
 import re
+import sys
 
 from bug_buddy.constants import PYTHON_FILE_TYPE
 from bug_buddy.errors import BugBuddyError
-from bug_buddy.schema import Repository, TestRun
 from bug_buddy.execution import run_test
 from bug_buddy.git_utils import (is_repo_clean,
                                  create_commit,
                                  revert_commit)
+from bug_buddy.logger import logger
+from bug_buddy.schema import Repository, TestRun
+
+
+ROUTINE_SIG = re.compile('def \w*\((\w|\s|,|=|\r|\*|\n|^\))*\):')
+
 
 
 def generate_synthetic_test_results(repository: Repository,
@@ -78,8 +86,8 @@ def edit_random_function(repository):
     for repo_file in repo_files:
         routines.extend(get_routines_from_file(repository, repo_file))
 
-    seleted_routine = routines[random.randint(0, len(routines))]
-    _add_assert_to_function(seleted_routine)
+    seleted_routine = routines[random.randint(0, len(routines) - 1)]
+    _add_assert_to_routine(seleted_routine)
 
 
 def get_routines_from_file(repository, repo_file):
@@ -87,36 +95,54 @@ def get_routines_from_file(repository, repo_file):
     Returns the methods and functions from the file
     '''
     # first load the entire project
-    import pdb; pdb.set_trace()
-    repo_module = SourceFileLoader(repo_file.split('/')[-1], repo_file).load_module()
+    # root_module = os.path.join(repository.src_path, '__init__.py')
+    # spec = importlib.util.spec_from_file_location(repository.name, root_module)
+    # module = importlib.util.module_from_spec(spec)
+    # sys.modules[spec.name] = module
+    # spec.loader.exec_module(module)
+
+    # now load the submodule
+    submodule_name = repo_file.split('/')[-1].split('.')[0]
+    spec = importlib.util.spec_from_file_location(
+        '{}.{}'.format(repository.name, submodule_name),
+        repo_file)
+    repo_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(repo_module)
 
     routines = []
 
     for member_name, member in inspect.getmembers(repo_module):
-        if member_name == '__builtins__':
-            continue
+        try:
+            if member_name == '__builtins__':
+                continue
 
-        # get functions
-        if inspect.isfunction(member):
-            routines.append(member)
+            # get functions
+            if inspect.isfunction(member):
+                print('adding one')
+                routines.append(member)
 
-        # TODO: this should be recursive because you can have nested classes
-        #       even though that is rare
-        if inspect.isclass(member):
-            for class_member_name, class_member in inspect.getmembers(member):
-                # get methods from classes.
+            # TODO: this should be recursive because you can have nested classes
+            #       even though that is rare
+            if inspect.isclass(member):
+                for class_member_name, class_member in inspect.getmembers(member):
+                    # get methods from classes.
 
-                # TODO: I also need to add properties..
-                # isinstance(class_member, property)
-                # unfortunately it does not have a module
-                if (inspect.ismethod(class_member) or
-                        inspect.isfunction(class_member)):
-                    routines.append(class_member)
+                    # TODO: I also need to add properties..
+                    # isinstance(class_member, property)
+                    # unfortunately it does not have a module
+                    if (inspect.ismethod(class_member) or
+                            inspect.isfunction(class_member)):
+                        print('adding one')
+                        routines.append(class_member)
 
-    routines = [routine for routine in routines if
-                inspect.getmodule(routine) == repo_module and
-                inspect.getsourcefile(routine) == repo_file]
-    return list(set(routines))
+        except Exception as e:
+            logger.error('Hit error working on {} with: {}'
+                         .format(member_name, e))
+
+    file_routines = [routine for routine in routines if
+                     inspect.getsourcefile(routine) == repo_file]
+
+    return list(set(file_routines))
 
 
 def _add_assert_to_routine(routine):
@@ -126,6 +152,7 @@ def _add_assert_to_routine(routine):
     '''
     routine_src_code, starting_line = inspect.getsourcelines(routine)
     repo_file = inspect.getsourcefile(routine)
-    with open(repo_file, 'w') as file:
+    with open(repo_file, 'a') as file:
         file.seek(starting_line + len(routine_src_code))
         import pdb; pdb.set_trace()
+        print('hmm')
