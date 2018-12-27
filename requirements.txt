@@ -1,4 +1,5 @@
 alabaster==0.7.11
+astor==0.7.1
 atomicwrites==1.2.1
 attrs==18.2.0
 Babel==2.6.0
@@ -8,7 +9,6 @@ Click==7.0
 coverage==4.5.1
 docutils==0.14
 flake8==3.5.0
--e git+https://github.com/pallets/flask@d7eea1b49a5ea67dd9f39b9fa0a823466433f486#egg=Flask
 future==0.17.1
 gitdb2==2.0.4
 GitPython==2.1.11

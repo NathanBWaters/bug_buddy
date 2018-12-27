@@ -31,7 +31,7 @@ def set_bug_buddy_branch(repository: Repository):
                      cwd=repository.path)
 
 
-def create_commit(repository: Repository) -> dict:
+def create_commit(repository: Repository) -> Commit:
     '''
     Given a repository, create a commit
 
@@ -43,7 +43,6 @@ def create_commit(repository: Repository) -> dict:
 
     Git(repository.path).add('-A')
     Git(repository.path).commit('-m', 'bug_buddy_synthetic_commit')
-    git_push(repository)
 
 
 def revert_commit(repository: Repository, commit: Commit):

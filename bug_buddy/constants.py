@@ -10,3 +10,9 @@ FILE_TYPES = {
 
 SUCCESS = 'success'
 FAILURE = 'failure'
+
+# a statement that doesn't cause any tests to fail
+BENIGN_STATEMENT = 'assert True'
+
+# a statement that doesn't causes tests to fail
+ERROR_STATEMENT = 'assert False'
