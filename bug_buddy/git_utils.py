@@ -41,8 +41,12 @@ def create_commit(repository: Repository) -> Commit:
     # You should only create commits on the "bug_buddy" branch
     set_bug_buddy_branch(repository)
 
+    import pdb; pdb.set_trace()
+
     Git(repository.path).add('-A')
     Git(repository.path).commit('-m', 'bug_buddy_synthetic_commit')
+
+    logger.info('Created commit: {}'.format(commit))
 
 
 def revert_commit(repository: Repository, commit: Commit):

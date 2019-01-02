@@ -33,6 +33,7 @@ class BugBuddyTest(unittest.TestCase):
         self.example_repo, _ = get_or_create(
             Repository,
             name='example_repo',
+            src_directory='src_dir',
             url='https://github.com/exe/example_repo',
             path='/path/to/fake/dir',
             initialize_commands='source env/bin/activate',
@@ -44,4 +45,5 @@ class BugBuddyTest(unittest.TestCase):
         self.example_test_run, _ = get_or_create(
             TestRun,
             commit=self.example_commit,
-            output_file=os.path.join(self.DataDir, 'pytest_junit.xml'))
+            output_file=os.path.join(self.DataDir,
+                                     'example_results/pytest_junit.xml'))

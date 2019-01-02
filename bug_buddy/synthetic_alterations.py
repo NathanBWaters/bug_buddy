@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 '''
 API for editing a repository and generating synthetic data.
 
@@ -37,8 +38,7 @@ from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, Routine, TestRun
 
 
-def generate_synthetic_test_results(repository: Repository,
-                                    run_limit: int=1):
+def generate_synthetic_test_results(repository: Repository, run_limit: int):
     '''
     Creates multiple synthetic changes and test results
     '''
@@ -68,22 +68,16 @@ def create_synthetic_change_and_fixing_changes(repository: Repository):
         msg = ('You attempted to work on an unclean repository.  Please run: \n'
                '"git checkout ." to clean the library')
         raise BugBuddyError(msg)
-    edit_random_function(repository)
-    commit = create_commit(repository)
-    logger.info('Created commit: {}'.format(commit))
+    edit_random_routines(repository)
+    # commit = create_commit(repository)
     # test_run = run_test(repository, commit)
     # revert_commit(repository)
 
 
-def edit_random_function(repository):
+def get_routines_from_repo(repository):
     '''
-    Alters the repository in a very simplistic manner.  For right now, we are
-    just going to take a method or function and add either an assert False or
-    assert True to it
-
-    @param repository: the code base we are changing
+    Returns the routines from the repository src files
     '''
-    # contains the methods/functions across the files
     routines = []
 
     # collect all the files
@@ -92,8 +86,32 @@ def edit_random_function(repository):
     for repo_file in repo_files:
         routines.extend(get_routines_from_file(repository, repo_file))
 
-    selected_routine = routines[random.randint(0, len(routines) - 1)]
-    _add_assert_to_routine(selected_routine)
+    return routines
+
+
+def edit_random_routines(repository, num_edits=None):
+    '''
+    Alters the repository in a very simplistic manner.  For right now, we are
+    just going to take a method or function and add either an assert False or
+    assert True to it
+
+    @param repository: the code base we are changing
+    '''
+    # contains the methods/functions across the files
+    routines = get_routines_from_repo(repository)
+
+    if num_edits is None:
+        # at most edit only 1/10th of the routines in the repository
+        num_edits = random.randint(1, int(len(repo_files) / 10))
+        print('num_edits', num_edits)
+
+    for i in range(num_edits):
+        routine_index = random.randint(0, len(routines) - 1)
+        selected_routine = routines[routine_index]
+        _add_assert_to_routine(selected_routine)
+
+        # remove the routine so we don't edit it again
+        routines.pop(routine_index)
 
 
 def get_routines_from_file(repository, repo_file):
