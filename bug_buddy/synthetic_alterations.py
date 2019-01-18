@@ -98,20 +98,43 @@ def edit_random_routines(repository, num_edits=None):
     @param repository: the code base we are changing
     '''
     # contains the methods/functions across the files
-    routines = get_routines_from_repo(repository)
+    # import pdb; pdb.set_trace()
+    uneditted_routines = get_routines_from_repo(repository)
+
+    altered_routines = []
 
     if num_edits is None:
         # at most edit only 1/10th of the routines in the repository
         num_edits = random.randint(1, int(len(repo_files) / 10))
-        print('num_edits', num_edits)
 
     for i in range(num_edits):
-        routine_index = random.randint(0, len(routines) - 1)
-        selected_routine = routines[routine_index]
+        routine_index = random.randint(0, len(uneditted_routines) - 1)
+        selected_routine = uneditted_routines[routine_index]
         _add_assert_to_routine(selected_routine)
 
-        # remove the routine so we don't edit it again
-        routines.pop(routine_index)
+        altered_routines.append(selected_routine)
+
+        # the file has been editted.  This means we need to refresh the routines
+        # with the correct line numbers.  However, we still don't want to edit
+        # the routine that we just previously altered.
+        uneditted_routines = get_routines_from_repo(repository)
+
+        for altered_routine in altered_routines:
+            matching_routines = [
+                routine for routine in uneditted_routines
+                if routine.node.name == altered_routine.node.name]
+
+            closest_routine = matching_routines[0]
+            for matching_routine in matching_routines:
+                if (abs(matching_routine.node.lineno - altered_routine.node.lineno) <
+                        abs(closest_routine.node.lineno - altered_routine.node.lineno)):
+                    # we have found a routine that is more likely to correspond
+                    # with the original altered_routine.
+                    closest_routine = matching_routine
+
+            # delete the already altered routine from the list of available
+            # routines
+            uneditted_routines.remove(closest_routine)
 
 
 def get_routines_from_file(repository, repo_file):
@@ -136,6 +159,6 @@ def _add_assert_to_routine(routine):
     Adds either a assert True or assert False right after the beginning to a
     method.  Returns whether the change was innocuous or not.
     '''
-    is_benign_statement = random.randint(0, 1)
-    statement = BENIGN_STATEMENT if is_benign_statement else ERROR_STATEMENT
+    is_error_statement = random.randint(0, 1)
+    statement = ERROR_STATEMENT if is_error_statement else BENIGN_STATEMENT
     routine.prepend_statement(statement)

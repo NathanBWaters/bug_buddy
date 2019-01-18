@@ -29,6 +29,14 @@ class Routine(object):
         '''
         Writes a statement to the beginning of the routine
         '''
+        def _is_comment(node):
+            '''
+            Checks to see if the node is a comment.  We need to because we do
+            not want to add our statement into the comment.  For some reason,
+            comments lineno is the last part of the comment.
+            '''
+            return True if isinstance(node.value, ast.Str) else False
+
         # Get the first node in the function, which is it's first statement.
         # We will add the statement here
         logger.info('Adding "{statement}" to {file} | {routine_name}@{lineno}'
@@ -38,6 +46,9 @@ class Routine(object):
                             lineno=self.node.lineno))
         first_node = self.node.body[0]
         first_line_in_routine = first_node.lineno
+
+        # scoot down one line if the first node is a comment
+        first_line_in_routine += 1 if _is_comment(first_node) else 0
 
         # note that a comment after the function does not seem to have a
         # column offset, and instead returns -1.

@@ -41,8 +41,6 @@ def create_commit(repository: Repository) -> Commit:
     # You should only create commits on the "bug_buddy" branch
     set_bug_buddy_branch(repository)
 
-    import pdb; pdb.set_trace()
-
     Git(repository.path).add('-A')
     Git(repository.path).commit('-m', 'bug_buddy_synthetic_commit')
 
@@ -59,6 +57,13 @@ def revert_commit(repository: Repository, commit: Commit):
     set_bug_buddy_branch(repository)
 
     Git(repository.path).revert(commit.commit_id)
+
+
+def revert_unstaged_changes(repository: Repository):
+    '''
+    Reverts the un-staged changes in a repository
+    '''
+    Git(repository.path).checkout('.')
 
 
 def git_push(repository: Repository):

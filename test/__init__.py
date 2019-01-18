@@ -35,15 +35,15 @@ class BugBuddyTest(unittest.TestCase):
             name='example_repo',
             src_directory='src_dir',
             url='https://github.com/exe/example_repo',
-            path='/path/to/fake/dir',
+            path=os.path.join(self.DataDir, 'example_repo'),
             initialize_commands='source env/bin/activate',
             test_commands='pytest')
         self.example_commit, _ = get_or_create(
             Commit,
             repository=self.example_repo,
             commit_id='e657b562175400d499640f5cd8b3449700b5f36d')
-        self.example_test_run, _ = get_or_create(
-            TestRun,
-            commit=self.example_commit,
-            output_file=os.path.join(self.DataDir,
-                                     'example_results/pytest_junit.xml'))
+        # self.example_test_run, _ = get_or_create(
+        #     TestRun,
+        #     commit=self.example_commit,
+        #     output_file=os.path.join(self.DataDir,
+        #                              'example_results/pytest_junit.xml'))

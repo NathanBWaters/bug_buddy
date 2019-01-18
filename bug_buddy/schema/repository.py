@@ -76,7 +76,10 @@ class Repository(Base):
         Returns the absolute path to the directory that contains the source
         files
         '''
-        return os.path.join(self.path, self.src_directory)
+        src_path = os.path.join(self.path, self.src_directory)
+        if not src_path.endswith('/'):
+            src_path += '/'
+        return src_path
 
     def get_src_files(self, filter_file_type=None) -> dict:
         '''
