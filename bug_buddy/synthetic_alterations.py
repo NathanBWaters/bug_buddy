@@ -29,11 +29,12 @@ import sys
 from bug_buddy.constants import (BENIGN_STATEMENT,
                                  ERROR_STATEMENT,
                                  PYTHON_FILE_TYPE)
+from bug_buddy.db import session_manager
 from bug_buddy.errors import BugBuddyError
-from bug_buddy.execution import run_test
 from bug_buddy.git_utils import (is_repo_clean,
                                  create_commit,
                                  revert_commit)
+from bug_buddy.harness import run_test
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, Routine, TestRun
 
@@ -42,25 +43,22 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
     '''
     Creates multiple synthetic changes and test results
     '''
-    print('Creating synthetic results for: ', repository)
+    logger.info('Creating synthetic results for: {}'.format(repository))
     num_runs = 0
     while run_limit is None or num_runs <= run_limit:
-        print('Creating TestRun #{}'.format(num_runs))
-        create_synthetic_change_and_fixing_changes(repository)
+        logger.info('Creating TestRun #{}'.format(num_runs))
+
+        create_synthetic_alterations_and_change(repository)
+        create_fixing_changes(repository)
         num_runs += 1
         break
 
 
-def create_synthetic_change_and_fixing_changes(repository: Repository):
+def create_synthetic_alterations_and_change(repository: Repository):
     '''
     Creates synthetic changes to a code base, creates a commit, and then runs
     the tests to see how the changes impacted the test results.  These changes
     are either 'assert False' or 'assert True'.
-
-    It then creates a series of 'Fixing Changes', which individual revert one of
-    the 'assert False' statements.  For each revert of the 'assert False'
-    statements, it will then rerun the tests to see how a fixing change alters
-    the test results
 
     @param repository: the code base we are changing
     '''
@@ -69,9 +67,14 @@ def create_synthetic_change_and_fixing_changes(repository: Repository):
                '"git checkout ." to clean the library')
         raise BugBuddyError(msg)
     edit_random_routines(repository)
-    # commit = create_commit(repository)
-    # test_run = run_test(repository, commit)
-    # revert_commit(repository)
+
+    commit = create_commit(repository, name='synthetic_alteration_change')
+    test_run = run_test(repository, commit)
+
+    # add the commit and test run to our database
+    with session_manager() as session:
+        session.add(commit)
+        session.add(test_run)
 
 
 def get_routines_from_repo(repository):
@@ -105,7 +108,7 @@ def edit_random_routines(repository, num_edits=None):
 
     if num_edits is None:
         # at most edit only 1/10th of the routines in the repository
-        num_edits = random.randint(1, int(len(repo_files) / 10))
+        num_edits = random.randint(1, int(len(repository.get_src_files()) / 10))
 
     for i in range(num_edits):
         routine_index = random.randint(0, len(uneditted_routines) - 1)

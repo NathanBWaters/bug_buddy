@@ -19,18 +19,20 @@ class Commit(Base):
     __tablename__ = 'commit'
     id = Column(Integer, primary_key=True)
     commit_id = Column(String, nullable=False)
+    branch = Column(String, nullable=False)
 
     repository_id = Column(Integer, ForeignKey('repository.id'))
     repository = relationship('Repository', back_populates='commits')
 
     test_runs = relationship('TestRun', back_populates='commit')
 
-    def __init__(self, repository: Repository, commit_id):
+    def __init__(self, repository: Repository, commit_id: str, branch: str):
         '''
         Creates a new TestResults instance
         '''
         self.repository = repository
         self.commit_id = commit_id
+        self.branch = branch
 
     def causes_test_failures(self):
         '''

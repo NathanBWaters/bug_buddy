@@ -3,7 +3,7 @@
 The argparse subcommands
 '''
 from bug_buddy.logger import logger
-from bug_buddy.db import create, get
+from bug_buddy.db import create, get, session_manager
 from bug_buddy.schema import Repository
 from bug_buddy.git_utils import (get_repository_url_from_path,
                                  get_repository_name_from_url)
@@ -58,5 +58,6 @@ def generate(path: str, run_limit: int=None):
     @param repository_name: name of the repository
     '''
     url = get_repository_url_from_path(path)
-    repository = get(Repository, url=url)
-    generate_synthetic_test_results(repository, run_limit)
+    with session_manager() as session:
+        repository = get(session, Repository, url=url)
+        generate_synthetic_test_results(repository, run_limit)

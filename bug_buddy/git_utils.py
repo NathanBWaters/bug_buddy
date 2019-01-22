@@ -5,8 +5,10 @@ from git import Repo
 from git.cmd import Git
 import subprocess
 
+from bug_buddy.db import create
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.schema import Repository, Commit
+from bug_buddy.logger import logger
 
 
 def is_repo_clean(repository: Repository):
@@ -31,19 +33,50 @@ def set_bug_buddy_branch(repository: Repository):
                      cwd=repository.path)
 
 
-def create_commit(repository: Repository) -> Commit:
+def get_commit_id(repository: Repository) -> str:
+    '''
+    Given a repository, return the branch name
+    '''
+    commit_id = subprocess.check_output(['git', 'rev-parse', 'HEAD'],
+                                        cwd=repository.path)
+    # convert bytes to string and take away newline
+    return commit_id.decode("utf-8").strip()
+
+
+def get_branch_name(repository: Repository) -> str:
+    '''
+    Given a repository, return the branch name
+    '''
+    branch_name = subprocess.check_output(
+        ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+        cwd=repository.path)
+    # convert bytes to string and take away newline
+    return branch_name.decode("utf-8").strip()
+
+
+def create_commit(repository: Repository, name=None) -> Commit:
     '''
     Given a repository, create a commit
 
     @param repository: the repository to be analyzed
     @param run: the run to be analyzed
     '''
+    commit_name = name or 'bug_buddy_synthetic_commit'
     # You should only create commits on the "bug_buddy" branch
     set_bug_buddy_branch(repository)
 
     Git(repository.path).add('-A')
-    Git(repository.path).commit('-m', 'bug_buddy_synthetic_commit')
+    Git(repository.path).commit('-m', commit_name)
 
+    commit_id = get_commit_id(repository)
+    branch = get_branch_name(repository)
+
+    import pdb; pdb.set_trace()
+
+    commit = create(Commit,
+                    repository=repository,
+                    commit_id=commit_id,
+                    branch=branch)
     logger.info('Created commit: {}'.format(commit))
 
 

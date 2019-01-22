@@ -35,7 +35,8 @@ class Routine(object):
             not want to add our statement into the comment.  For some reason,
             comments lineno is the last part of the comment.
             '''
-            return True if isinstance(node.value, ast.Str) else False
+            return (True if hasattr(node, 'value') and
+                    isinstance(node.value, ast.Str) else False)
 
         # Get the first node in the function, which is it's first statement.
         # We will add the statement here

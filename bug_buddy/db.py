@@ -2,6 +2,7 @@
 '''
 Code for communicating with the bug_buddy database
 '''
+from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -20,25 +21,35 @@ Session = sessionmaker()
 Session.configure(bind=engine)
 
 
-def get(sql_class, **kwargs):
+@contextmanager
+def session_manager():
+    """Provide a transactional scope around a series of operations."""
+    session = Session()
+    try:
+        yield session
+        session.commit()
+    except:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def get(session, sql_class, **kwargs):
     '''
     Used to get a single instance of a class that matches the kwargs parameters
     '''
-    session = Session()
     query = session.query(sql_class)
     class_instance = query.filter_by(**kwargs).first()
-    session.commit()
     return class_instance
 
 
-def create(sql_class, **kwargs):
+def create(session, sql_class, **kwargs):
     '''
     Used to get a single instance of a class that matches the kwargs parameters
     '''
-    session = Session()
     new_class_instance = sql_class(**kwargs)
     session.merge(new_class_instance)
-    session.commit()
     return new_class_instance
 
 

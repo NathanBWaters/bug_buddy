@@ -8,5 +8,6 @@ def run_test(repository: Repository, commit: Commit):
     '''
     Runs a repository's tests and records the results
     '''
+    # USE COLLECTION.py
     print('Implement run_test')
     assert False
