@@ -4,7 +4,7 @@ Reads from the output file a test run
 from junitparser import JUnitXml
 
 from bug_buddy.constants import SUCCESS, FAILURE
-from bug_buddy.db import get_or_create, create
+from bug_buddy.db import Session, get_or_create, create, session_manager
 from bug_buddy.schema import Repository, TestResult, Test, TestRun, Commit
 
 
@@ -20,23 +20,29 @@ def record_test_results(repository: Repository, test_run: TestRun) -> dict:
     assert False
 
 
-def create_results_from_junit_xml(repository: Repository, test_run: TestRun):
+def create_results_from_junit_xml(output_file: str,
+                                  repository: Repository,
+                                  test_run: TestRun):
     '''
     Gets results from a JUnitXML format file
     https://docs.pytest.org/en/latest/usage.html#creating-junitxml-format-files
     '''
-    xml_output = JUnitXml.fromfile(test_run.output_file)
+    session = Session.object_session(test_run)
+    xml_output = JUnitXml.fromfile(output_file)
 
     for test_case in xml_output:
         test, _ = get_or_create(
+            session,
             Test,
             repository=repository,
             name=test_case.name,
             file=test_case._elem.attrib.get('file'),
+            classname=test_case._elem.attrib.get('classname'),
         )
 
         status = FAILURE if test_case.result else SUCCESS
         create(
+            session,
             TestResult,
             test=test,
             test_run=test_run,

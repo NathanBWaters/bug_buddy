@@ -4,7 +4,7 @@ import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from bug_buddy.commands import analyze, generate, initialize
+from bug_buddy.commands import analyze, generate, initialize, delete_repository
 
 
 def _analyze(args):
@@ -14,6 +14,15 @@ def _analyze(args):
     @param args: the argparse arguments
     '''
     analyze(args.path)
+
+
+def _delete(args):
+    '''
+    Parses arguments and passes them to the analyze subcommand module
+
+    @param args: the argparse arguments
+    '''
+    delete_repository(args.path)
 
 
 def _generate(args):
@@ -89,6 +98,19 @@ if __name__ == '__main__':
         '--source-directory',
         type=str,
         help='The subdirectory of your project that contains your project files')
+
+    ###################################
+    #  Delete SubCommand
+    ###################################
+    delete_command = subparsers.add_parser(
+        'delete',
+        description='Initializes a repository given a path',
+        help=('The delete subcommand will delete  by bug_buddy'))
+    delete_command.set_defaults(func=_delete)
+    delete_command.add_argument(
+        'path',
+        type=str,
+        help='Path to the repository you want to delete')
 
     args = parser.parse_args()
     args.func(args)

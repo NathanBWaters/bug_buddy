@@ -53,16 +53,23 @@ def create(session, sql_class, **kwargs):
     return new_class_instance
 
 
-def get_or_create(sql_class, **kwargs):
+def get_or_create(session, sql_class, **kwargs):
     '''
     Used to get a single instance of a class that matches the kwargs parameters
     '''
-    class_instance = get(sql_class, **kwargs)
+    class_instance = get(session, sql_class, **kwargs)
     if class_instance:
         return class_instance, True
 
-    class_instance = create(sql_class, **kwargs)
+    class_instance = create(session, sql_class, **kwargs)
     return class_instance, False
+
+
+def delete(session, sql_instance):
+    '''
+    Used to get a single instance of a class that matches the kwargs parameters
+    '''
+    session.delete(sql_instance)
 
 
 def get_or_create_repository(name: str=None,

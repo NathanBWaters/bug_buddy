@@ -29,12 +29,13 @@ import sys
 from bug_buddy.constants import (BENIGN_STATEMENT,
                                  ERROR_STATEMENT,
                                  PYTHON_FILE_TYPE)
-from bug_buddy.db import session_manager
+from bug_buddy.db import session_manager, Session
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.git_utils import (is_repo_clean,
                                  create_commit,
-                                 revert_commit)
-from bug_buddy.harness import run_test
+                                 revert_commit,
+                                 set_bug_buddy_branch)
+from bug_buddy.runner import run_test
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, Routine, TestRun
 
@@ -49,9 +50,17 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
         logger.info('Creating TestRun #{}'.format(num_runs))
 
         create_synthetic_alterations_and_change(repository)
-        create_fixing_changes(repository)
+        # create_fixing_changes(repository)
         num_runs += 1
         break
+
+
+def create_fixing_changes(repository: Repository):
+    '''
+    Creates fixing changes for the synthetic change
+    '''
+    print('Implement run_test')
+    assert False
 
 
 def create_synthetic_alterations_and_change(repository: Repository):
@@ -66,15 +75,24 @@ def create_synthetic_alterations_and_change(repository: Repository):
         msg = ('You attempted to work on an unclean repository.  Please run: \n'
                '"git checkout ." to clean the library')
         raise BugBuddyError(msg)
+
+    # make sure we are on the bug buddy branch
+    set_bug_buddy_branch(repository)
+
+    # make synthetic alterations to the project
     edit_random_routines(repository)
 
-    commit = create_commit(repository, name='synthetic_alteration_change')
+    session = Session.object_session(repository)
+
+    commit = create_commit(repository,
+                           name='synthetic_alteration_change',
+                           is_synthetic=True)
+
     test_run = run_test(repository, commit)
 
     # add the commit and test run to our database
-    with session_manager() as session:
-        session.add(commit)
-        session.add(test_run)
+    session.add(commit)
+    session.add(test_run)
 
 
 def get_routines_from_repo(repository):

@@ -7,8 +7,10 @@ single commit
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
+import textwrap
 import time
 
+from bug_buddy.constants import SUCCESS, FAILURE
 from bug_buddy.schema.base import Base
 from bug_buddy.schema.commit import Commit
 
@@ -21,25 +23,62 @@ class TestRun(Base):
     __tablename__ = 'test_run'
     id = Column(Integer, primary_key=True)
 
-    started_timestamp = Column(Integer, nullable=False)
+    start_timestamp = Column(Integer, nullable=False)
 
     commit_id = Column(Integer, ForeignKey('commit.id'))
     commit = relationship('Commit', back_populates='test_runs')
 
-    output_file = Column(String(500), nullable=False)
-
-    test_results = relationship('TestResult', back_populates='test_run')
+    test_results = relationship('TestResult',
+                                back_populates='test_run',
+                                cascade='all, delete, delete-orphan')
 
     def __init__(self,
                  commit: Commit,
-                 output_file: str,
-                 started_timestamp: int=None):
+                 start_timestamp: int=None):
         '''
         Creates a new TestResults instance
         '''
-        if not started_timestamp:
-            started_timestamp = time.time()
+        if not start_timestamp:
+            start_timestamp = time.time()
 
-        self.started_timestamp = started_timestamp
-        self.output_file = output_file
+        self.start_timestamp = start_timestamp
         self.commit = commit
+
+    @property
+    def num_passed_tests(self):
+        '''
+        Returns the number of passing tests in this test run
+        '''
+        return len(self.passed_tests)
+
+    @property
+    def passed_tests(self):
+        '''
+        Returns the list of passing tests in this test run
+        '''
+        return [test for test in self.test_results if test.status == SUCCESS]
+
+    @property
+    def num_failed_tests(self):
+        '''
+        Returns the number of failed tests in this test run
+        '''
+        return len(self.failed_tests)
+
+    @property
+    def failed_tests(self):
+        '''
+        Returns the list of failed tests in this test run
+        '''
+        return [test for test in self.test_results if test.status == FAILURE]
+
+    def __repr__(self):
+        '''
+        Converts the repository into a string
+        '''
+        return ('<TestRun {id} | {commit_id} | Passed: {passed} | '
+                'Failed: {failed} />'
+                .format(id=self.id,
+                        commit_id=self.commit_id,
+                        passed=self.num_passed_tests,
+                        failed=self.num_failed_tests))

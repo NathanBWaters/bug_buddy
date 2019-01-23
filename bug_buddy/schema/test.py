@@ -18,16 +18,31 @@ class Test(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     file = Column(String, nullable=False)
+    classname = Column(String, nullable=False)
 
     repository_id = Column(Integer, ForeignKey('repository.id'))
     repository = relationship('Repository', back_populates='tests')
 
     test_results = relationship('TestResult', back_populates='test')
 
-    def __init__(self, repository: Repository, name: str, file: str):
+    def __init__(self,
+                 repository: Repository,
+                 name: str,
+                 file: str,
+                 classname: str):
         '''
         Creates a new TestResults instance
         '''
         self.name = name
         self.file = file
         self.repository = repository
+        self.classname = classname
+
+    def __repr__(self):
+        '''
+        Converts the repository into a string
+        '''
+        return ('<Test {name} | {file} | {classname} />'
+                .format(name=self.name,
+                        file=self.file,
+                        classname=self.classname))

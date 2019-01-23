@@ -20,19 +20,27 @@ class Commit(Base):
     id = Column(Integer, primary_key=True)
     commit_id = Column(String, nullable=False)
     branch = Column(String, nullable=False)
+    is_synthetic = Column(Boolean, nullable=False)
 
     repository_id = Column(Integer, ForeignKey('repository.id'))
     repository = relationship('Repository', back_populates='commits')
 
-    test_runs = relationship('TestRun', back_populates='commit')
+    test_runs = relationship('TestRun',
+                             back_populates='commit',
+                             cascade='all, delete, delete-orphan')
 
-    def __init__(self, repository: Repository, commit_id: str, branch: str):
+    def __init__(self,
+                 repository: Repository,
+                 commit_id: str,
+                 branch: str,
+                 is_synthetic: bool=False):
         '''
         Creates a new TestResults instance
         '''
         self.repository = repository
         self.commit_id = commit_id
         self.branch = branch
+        self.is_synthetic = is_synthetic
 
     def causes_test_failures(self):
         '''
@@ -44,3 +52,13 @@ class Commit(Base):
                     return True
 
         return False
+
+    def __repr__(self):
+        '''
+        Converts the repository into a string
+        '''
+        is_synthetic = 'is synthetic' if self.is_synthetic else 'not synthetic'
+        return ('<Commit {commit_id} | {branch} | {is_synthetic}/>'
+                .format(commit_id=self.commit_id,
+                        branch=self.branch,
+                        is_synthetic=is_synthetic))

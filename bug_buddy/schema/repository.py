@@ -45,11 +45,11 @@ class Repository(Base):
     commits = relationship(
         'Commit',
         back_populates='repository',
-        cascade="all, delete, delete-orphan")
+        cascade='all, delete, delete-orphan')
     tests = relationship(
         'Test',
         back_populates='repository',
-        cascade="all, delete, delete-orphan")
+        cascade='all, delete, delete-orphan')
 
     repository_files = []
 

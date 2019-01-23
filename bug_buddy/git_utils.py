@@ -5,10 +5,10 @@ from git import Repo
 from git.cmd import Git
 import subprocess
 
-from bug_buddy.db import create
+from bug_buddy.db import create, Session
 from bug_buddy.errors import BugBuddyError
-from bug_buddy.schema import Repository, Commit
 from bug_buddy.logger import logger
+from bug_buddy.schema import Repository, Commit
 
 
 def is_repo_clean(repository: Repository):
@@ -28,9 +28,25 @@ def set_bug_buddy_branch(repository: Repository):
     All work should go to a defined git branch named "bug_buddy".  Idempotent.
     https://stackoverflow.com/a/35683029/4447761
     '''
-    subprocess.Popen(['git', 'checkout', 'bug_buddy', '||',
-                      'git', 'checkout', '-b', 'bug_buddy'],
-                     cwd=repository.path)
+    command = 'git checkout bug_buddy || git checkout -b bug_buddy'
+    process = subprocess.Popen(
+        command,
+        shell=True,
+        cwd=repository.path)
+    # stdout=subprocess.PIPE,
+    # stderr=subprocess.PIPE)
+    stdout, stderr = process.communicate()
+
+    # make sure the branch is pushed remotely
+    all_branches = Git(repository.path).branch('-a')
+
+    if 'remotes/origin/bug_buddy' not in all_branches:
+        command = 'git push --set-upstream origin bug_buddy'
+        process = subprocess.Popen(
+            command,
+            shell=True,
+            cwd=repository.path)
+        stdout, stderr = process.communicate()
 
 
 def get_commit_id(repository: Repository) -> str:
@@ -54,7 +70,9 @@ def get_branch_name(repository: Repository) -> str:
     return branch_name.decode("utf-8").strip()
 
 
-def create_commit(repository: Repository, name=None) -> Commit:
+def create_commit(repository: Repository,
+                  name: str=None,
+                  is_synthetic: bool=False) -> Commit:
     '''
     Given a repository, create a commit
 
@@ -71,13 +89,15 @@ def create_commit(repository: Repository, name=None) -> Commit:
     commit_id = get_commit_id(repository)
     branch = get_branch_name(repository)
 
-    import pdb; pdb.set_trace()
-
-    commit = create(Commit,
+    session = Session.object_session(repository)
+    commit = create(session,
+                    Commit,
                     repository=repository,
                     commit_id=commit_id,
-                    branch=branch)
+                    branch=branch,
+                    is_synthetic=is_synthetic)
     logger.info('Created commit: {}'.format(commit))
+    return commit
 
 
 def revert_commit(repository: Repository, commit: Commit):
@@ -119,3 +139,26 @@ def get_repository_url_from_path(path: str):
     '''
     return Repo(path).remotes.origin.url
 
+
+def delete_bug_buddy_branch(repository):
+    '''
+    Deletes the bug buddy branch
+    '''
+    # switch to master so we can delete blame buddy branch
+    Git(repository.path).checkout('master')
+
+    # this deletes the branch in the remote server
+    command = 'git push origin --delete bug_buddy'
+    process = subprocess.Popen(
+        command,
+        shell=True,
+        cwd=repository.path)
+    stdout, stderr = process.communicate()
+
+    # delete the branch locally
+    command = 'git branch -D bug_buddy'
+    process = subprocess.Popen(
+        command,
+        shell=True,
+        cwd=repository.path)
+    stdout, stderr = process.communicate()
