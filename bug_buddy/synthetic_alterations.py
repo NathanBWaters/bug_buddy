@@ -25,19 +25,28 @@ import os
 import random
 import re
 import sys
+from typing import List
 
 from bug_buddy.constants import (BENIGN_STATEMENT,
                                  ERROR_STATEMENT,
-                                 PYTHON_FILE_TYPE)
+                                 PYTHON_FILE_TYPE,
+                                 SYNTHETIC_CHANGE,
+                                 SYNTHETIC_FIXING_CHANGE)
 from bug_buddy.db import session_manager, Session
-from bug_buddy.errors import BugBuddyError
-from bug_buddy.git_utils import (is_repo_clean,
+from bug_buddy.errors import UserError
+from bug_buddy.git_utils import (get_most_recent_commit,
+                                 get_diffs,
+                                 is_repo_clean,
                                  create_commit,
-                                 revert_commit,
+                                 git_push,
+                                 create_reset_commit,
                                  set_bug_buddy_branch)
 from bug_buddy.runner import run_test
 from bug_buddy.logger import logger
-from bug_buddy.schema import Repository, Routine, TestRun
+from bug_buddy.schema import Repository, Routine, TestRun, Commit, Diff
+
+# aliases for typing
+DiffList = List[Diff]
 
 
 def generate_synthetic_test_results(repository: Repository, run_limit: int):
@@ -49,18 +58,96 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
     while run_limit is None or num_runs <= run_limit:
         logger.info('Creating TestRun #{}'.format(num_runs))
 
+        # create an initial change, which asserts a random number of edits to
+        # the repository
         create_synthetic_alterations_and_change(repository)
-        # create_fixing_changes(repository)
+
+        # iteratively remove each piece of code that causes tests to fail.
+        # This means essentially removing each 'assert False' and then running
+        # the tests against each fixed up commit.
+        create_fixing_changes(repository)
+
+        # revert to beginning of the branch, and then push that commit as a
+        # new commit so we non-destructively can repeat this process with a
+        # 'fresh' branch.
+        create_reset_commit(repository)
+
         num_runs += 1
         break
+
+    # push all the new commits we've created
+    git_push(repository)
 
 
 def create_fixing_changes(repository: Repository):
     '''
     Creates fixing changes for the synthetic change
+
+    We have to get the diffs between the last synthetic alteration commit and
+    the latest commit.  Then we look through the diff for an 'assert False'.
+    We choose one of them and then get it's corresponding line number.  We then
+    simply remove that single line and create a new commit.  After that we run
+    the tests against the new "Fixing Change" commit.
+
+    After every fixing change, we are going to have recompute the diff between
+    the new fixing change commit and the original commit that was before the
+    synthetic_alteration_commit because the file contents have changed.
+
+    @param repository: the code base we are changing
+    @param synthetic_alteration_commit: the commit that originally made all of
+                                        the edits that we need to fix up
     '''
-    print('Implement run_test')
-    assert False
+    # get the latest commit from master
+    latest_master = get_most_recent_commit(repository)
+
+    # get the latest commit from the local bug_buddy branch
+    latest_commit = get_most_recent_commit(repository, branch='bug_buddy')
+
+    diffs = get_diffs(repository, latest_master, latest_commit)
+
+    while any([ERROR_STATEMENT in diff.content for diff in diffs]):
+        # create a fixing change commit and set that commit to be the latest
+        # commit.
+        latest_commit = create_fixing_change(repository, diffs)
+        diffs = get_diffs(repository, latest_master, latest_commit)
+
+
+def create_fixing_change(repository: Repository, diffs: DiffList):
+    '''
+    Creates a single fixing change.  It removes a single 'assert False' that
+    is still present from the original synthetic alteration
+    '''
+    random.shuffle(diffs)
+
+    made_fixing_alteration = False
+    for diff in diffs:
+        if ERROR_STATEMENT in diff.content:
+            logger.info('Creating fixing change by removing line {} from {}'
+                        .format(diff.line_number, diff.file))
+            # we have an error statement that we need to remove.
+            file_path = os.path.join(repository.path, diff.file)
+            with open(file_path) as f:
+                content = f.readlines()
+
+            content.pop(diff.line_number)
+
+            with open(file_path, 'w') as f:
+                f.writelines(content)
+
+            made_fixing_alteration = True
+            break
+
+    # assumes we made a fix
+    if made_fixing_alteration:
+        commit = create_commit(repository,
+                               name='synthetic_fixing_change',
+                               commit_type=SYNTHETIC_FIXING_CHANGE)
+        test_run = run_test(repository, commit)
+
+        session = Session.object_session(repository)
+        # add the commit and test run to our database
+        session.add(commit)
+        session.add(test_run)
 
 
 def create_synthetic_alterations_and_change(repository: Repository):
@@ -74,7 +161,7 @@ def create_synthetic_alterations_and_change(repository: Repository):
     if not is_repo_clean(repository):
         msg = ('You attempted to work on an unclean repository.  Please run: \n'
                '"git checkout ." to clean the library')
-        raise BugBuddyError(msg)
+        raise UserError(msg)
 
     # make sure we are on the bug buddy branch
     set_bug_buddy_branch(repository)
@@ -86,7 +173,7 @@ def create_synthetic_alterations_and_change(repository: Repository):
 
     commit = create_commit(repository,
                            name='synthetic_alteration_change',
-                           is_synthetic=True)
+                           commit_type=SYNTHETIC_CHANGE)
 
     test_run = run_test(repository, commit)
 

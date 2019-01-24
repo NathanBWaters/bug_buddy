@@ -4,6 +4,7 @@ One stop shop for importing all of our models
 '''
 from . base import Base
 from . commit import Commit
+from . diff import Diff
 from . repository import Repository
 from . routine import Routine
 from . test_result import TestResult

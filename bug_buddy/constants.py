@@ -16,3 +16,9 @@ BENIGN_STATEMENT = 'assert True'
 
 # a statement that doesn't causes tests to fail
 ERROR_STATEMENT = 'assert False'
+
+# the types of changes
+DEVELOPER_CHANGE = 'developer'
+SYNTHETIC_CHANGE = 'synthetic_alteration'
+SYNTHETIC_FIXING_CHANGE = 'synthetic_fixing'
+SYNTHETIC_RESET_CHANGE = 'synthetic_reset'

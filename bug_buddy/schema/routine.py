@@ -68,7 +68,7 @@ class Routine(object):
 
     def __repr__(self):
         '''
-        Converts the repository into a string
+        Converts the Routine into a string
         '''
         return ('<Routine {name} | {file} | {line} />'
                 .format(name=self.node.name,

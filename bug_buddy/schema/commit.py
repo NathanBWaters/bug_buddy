@@ -7,7 +7,7 @@ from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
-from bug_buddy.constants import FAILURE
+from bug_buddy.constants import FAILURE, SYNTHETIC_CHANGE
 from bug_buddy.schema.base import Base
 from bug_buddy.schema.repository import Repository
 
@@ -20,10 +20,15 @@ class Commit(Base):
     id = Column(Integer, primary_key=True)
     commit_id = Column(String, nullable=False)
     branch = Column(String, nullable=False)
-    is_synthetic = Column(Boolean, nullable=False)
 
     repository_id = Column(Integer, ForeignKey('repository.id'))
     repository = relationship('Repository', back_populates='commits')
+
+    # commit_type is an extra metadata around the content of the commit:
+    #   1) DEVELOP - a standard change by a developer
+    #   2) SYNTHETIC - a synthetic alteration
+    #   3) RESET - a commit that resets synthetic alteration commits
+    commit_type = Column(String, nullable=False)
 
     test_runs = relationship('TestRun',
                              back_populates='commit',
@@ -33,14 +38,14 @@ class Commit(Base):
                  repository: Repository,
                  commit_id: str,
                  branch: str,
-                 is_synthetic: bool=False):
+                 commit_type: str=SYNTHETIC_CHANGE):
         '''
         Creates a new TestResults instance
         '''
         self.repository = repository
         self.commit_id = commit_id
         self.branch = branch
-        self.is_synthetic = is_synthetic
+        self.commit_type = commit_type
 
     def causes_test_failures(self):
         '''
@@ -57,8 +62,7 @@ class Commit(Base):
         '''
         Converts the repository into a string
         '''
-        is_synthetic = 'is synthetic' if self.is_synthetic else 'not synthetic'
-        return ('<Commit {commit_id} | {branch} | {is_synthetic}/>'
+        return ('<Commit {commit_id} | {branch} | {commit_type}/>'
                 .format(commit_id=self.commit_id,
                         branch=self.branch,
-                        is_synthetic=is_synthetic))
+                        commit_type=self.commit_type))

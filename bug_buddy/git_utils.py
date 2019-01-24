@@ -1,14 +1,17 @@
 '''
 Git utility methods
 '''
+import difflib
 from git import Repo
 from git.cmd import Git
+import re
 import subprocess
 
+from bug_buddy.constants import DEVELOPER_CHANGE
 from bug_buddy.db import create, Session
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
-from bug_buddy.schema import Repository, Commit
+from bug_buddy.schema import Repository, Commit, Diff
 
 
 def is_repo_clean(repository: Repository):
@@ -49,6 +52,54 @@ def set_bug_buddy_branch(repository: Repository):
         stdout, stderr = process.communicate()
 
 
+def get_diffs(repository: Repository,
+              starting_commit_id: str,
+              ending_commit_id: str):
+    '''
+    Returns a list of Diff instances.  This is still under the assumption that
+    we have simply added one line statements.
+    '''
+    repo = Repo(repository.path)
+
+    starting_commit = repo.commit(starting_commit_id)
+    ending_commit = repo.commit(ending_commit_id)
+
+    diff_index = starting_commit.diff(ending_commit)
+
+    diffs = []
+
+    for diff_item in diff_index.iter_change_type('M'):
+        file_at_start = diff_item.a_blob.data_stream.read().decode('utf-8').split('\n')
+        file_at_end = diff_item.b_blob.data_stream.read().decode('utf-8').split('\n')
+
+        diff = difflib.unified_diff(file_at_start,
+                                    file_at_end,
+                                    fromfile='file1',
+                                    tofile='file2',
+                                    lineterm='',
+                                    n=0)
+        lines = list(diff)
+        for i in range(len(lines)):
+            if lines[i].startswith('@@'):
+                # the diff follows the pattern.
+                #   '@@ previous_lineno, duration of addition, updated lineno'
+                #   '@@ -1381,0 +1382 @@'
+                #   '@@ -151,0 +152 @@'
+                # For more information:
+                #   https://www.wikiwand.com/en/Diff#/Unified_format
+                range_information = lines[i]
+                line_number = re.search('\+\d+', range_information).group()
+                line_number = int(line_number[1:])
+
+                added_content = lines[i + 1]
+
+                diff = Diff(added_content, line_number, diff_item.a_path)
+
+                diffs.append(diff)
+
+    return diffs
+
+
 def get_commit_id(repository: Repository) -> str:
     '''
     Given a repository, return the branch name
@@ -72,7 +123,7 @@ def get_branch_name(repository: Repository) -> str:
 
 def create_commit(repository: Repository,
                   name: str=None,
-                  is_synthetic: bool=False) -> Commit:
+                  commit_type: str=DEVELOPER_CHANGE) -> Commit:
     '''
     Given a repository, create a commit
 
@@ -95,7 +146,7 @@ def create_commit(repository: Repository,
                     repository=repository,
                     commit_id=commit_id,
                     branch=branch,
-                    is_synthetic=is_synthetic)
+                    commit_type=DEVELOPER_CHANGE)
     logger.info('Created commit: {}'.format(commit))
     return commit
 
@@ -138,6 +189,47 @@ def get_repository_url_from_path(path: str):
     Gets the url of the repository given the path
     '''
     return Repo(path).remotes.origin.url
+
+
+def get_most_recent_commit(repository, branch='origin/master'):
+    '''
+    Returns the latest commit from the specified branch.  Defaults to the latest
+    in master
+    '''
+    command = 'git log {branch} --format="%H" | head -1'.format(branch=branch)
+
+    commit_id, stderr = subprocess.Popen(
+        command,
+        shell=True,
+        cwd=repository.path,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE).communicate()
+
+    return commit_id.decode("utf-8").strip()
+
+
+def create_reset_commit(repository):
+    '''
+    Creates a new commit which contains the same content as a fresh branch
+    without any of it's previous edits
+    '''
+    latest_master_commit = get_most_recent_commit(repository)
+
+    # for right now
+    # TODO FIX
+    previous_commits = latest_master_commit
+
+    command = ('git revert --no-commit {previous_commits} && '
+               'git commit -m "{message}"'
+               .format(previous_commits=previous_commits,
+                       message='Resetting {}'.format(previous_commits)))
+
+    commit_id, stderr = subprocess.Popen(
+        command,
+        shell=True,
+        cwd=repository.path,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE).communicate()
 
 
 def delete_bug_buddy_branch(repository):
