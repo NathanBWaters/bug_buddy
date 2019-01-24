@@ -72,11 +72,11 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
         # 'fresh' branch.
         create_reset_commit(repository)
 
+        # push all the new commits we've created
+        git_push(repository)
+
         num_runs += 1
         break
-
-    # push all the new commits we've created
-    git_push(repository)
 
 
 def create_fixing_changes(repository: Repository):

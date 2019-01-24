@@ -6,12 +6,34 @@ from git import Repo
 from git.cmd import Git
 import re
 import subprocess
+from typing import List
 
-from bug_buddy.constants import DEVELOPER_CHANGE
+from bug_buddy.constants import DEVELOPER_CHANGE, SYNTHETIC_RESET_CHANGE
 from bug_buddy.db import create, Session
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, Commit, Diff
+
+
+def run_cmd(repository: Repository, command: str, log=False):
+    '''
+    Runs a shell command
+    '''
+    logger.info('Running shell command: "{}"'.format(command))
+    process = subprocess.Popen(
+        command,
+        shell=True,
+        cwd=repository.path,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE)
+    stdout, stderr = process.communicate()
+    if log:
+        if stdout:
+            logger.info(stdout)
+        if stderr:
+            logger.error(stderr)
+
+    return stdout.decode("utf-8").strip(), stderr.decode("utf-8").strip()
 
 
 def is_repo_clean(repository: Repository):
@@ -36,8 +58,6 @@ def set_bug_buddy_branch(repository: Repository):
         command,
         shell=True,
         cwd=repository.path)
-    # stdout=subprocess.PIPE,
-    # stderr=subprocess.PIPE)
     stdout, stderr = process.communicate()
 
     # make sure the branch is pushed remotely
@@ -89,7 +109,7 @@ def get_diffs(repository: Repository,
                 #   https://www.wikiwand.com/en/Diff#/Unified_format
                 range_information = lines[i]
                 line_number = re.search('\+\d+', range_information).group()
-                line_number = int(line_number[1:])
+                line_number = int(line_number[1:]) - 1
 
                 added_content = lines[i + 1]
 
@@ -135,7 +155,8 @@ def create_commit(repository: Repository,
     set_bug_buddy_branch(repository)
 
     Git(repository.path).add('-A')
-    Git(repository.path).commit('-m', commit_name)
+
+    Git(repository.path).commit('-m "{}"'.format(commit_name))
 
     commit_id = get_commit_id(repository)
     branch = get_branch_name(repository)
@@ -146,7 +167,7 @@ def create_commit(repository: Repository,
                     repository=repository,
                     commit_id=commit_id,
                     branch=branch,
-                    commit_type=DEVELOPER_CHANGE)
+                    commit_type=commit_type)
     logger.info('Created commit: {}'.format(commit))
     return commit
 
@@ -208,28 +229,48 @@ def get_most_recent_commit(repository, branch='origin/master'):
     return commit_id.decode("utf-8").strip()
 
 
-def create_reset_commit(repository):
+def get_commits_only_in_branch(repository, branch='origin/bug_buddy') -> List[str]:
+    '''
+    Returns the commits that are in one branch such as the bug_buddy branch
+
+        $ git log origin/master..origin/bug_buddy --format="%H"
+        > 8ce7ced9a5fe1f0b7e2cf3df1ce33b3eadc62d95
+        > 48a19ebc48a5c86f2aa73ffea4fe60141bf73520
+        > 80c9bbe863a077e69a37d0ef560f2553ae622ee3
+        > c3b36165440c53ab5e73de88819beb3ca96b3134
+    '''
+    command = 'git log origin/master..{} --format="%H"'.format(branch)
+    stdout, stderr = run_cmd(repository, command)
+    return stdout.split('\n')
+
+
+def create_reset_commit(repository: Repository):
     '''
     Creates a new commit which contains the same content as a fresh branch
-    without any of it's previous edits
+    without any of it's previous edits.
+
+    The easiest way to do this is by simply resetting all commits in the
+    bug_buddy branch and create a new commit out of that
     '''
-    latest_master_commit = get_most_recent_commit(repository)
+    logger.info('Creating reset commit')
+    set_bug_buddy_branch(repository)
 
-    # for right now
-    # TODO FIX
-    previous_commits = latest_master_commit
+    bug_buddy_commits = get_commits_only_in_branch(repository,
+                                                   branch='bug_buddy')
+    bug_buddy_commits = ' '.join(bug_buddy_commits)
 
-    command = ('git revert --no-commit {previous_commits} && '
-               'git commit -m "{message}"'
-               .format(previous_commits=previous_commits,
-                       message='Resetting {}'.format(previous_commits)))
+    # create the changes that effectively reverts all work we have done on this
+    # branch
+    command = ('git revert --no-commit {bug_buddy_commits}'
+               .format(bug_buddy_commits=bug_buddy_commits))
+    run_cmd(repository, command)
 
-    commit_id, stderr = subprocess.Popen(
-        command,
-        shell=True,
-        cwd=repository.path,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE).communicate()
+    # Now create a commit for those changes
+    create_commit(repository,
+                  'reset_commit',
+                  commit_type=SYNTHETIC_RESET_CHANGE)
+
+
 
 
 def delete_bug_buddy_branch(repository):
