@@ -34,6 +34,10 @@ class Commit(Base):
                              back_populates='commit',
                              cascade='all, delete, delete-orphan')
 
+    diff_lines = relationship('DiffLine',
+                              back_populates='commit',
+                              cascade='all, delete, delete-orphan')
+
     def __init__(self,
                  repository: Repository,
                  commit_id: str,

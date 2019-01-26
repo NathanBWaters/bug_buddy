@@ -20,7 +20,6 @@ know which line is really at fault for a failing test.
 import ast
 import inspect
 import importlib
-from importlib.machinery import SourceFileLoader
 import os
 import random
 import re
@@ -40,6 +39,8 @@ from bug_buddy.git_utils import (get_most_recent_commit,
                                  create_commit,
                                  git_push,
                                  create_reset_commit,
+                                 revert_unstaged_changes,
+                                 run_cmd,
                                  set_bug_buddy_branch)
 from bug_buddy.runner import run_test
 from bug_buddy.logger import logger
@@ -53,30 +54,30 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
     '''
     Creates multiple synthetic changes and test results
     '''
-    logger.info('Creating synthetic results for: {}'.format(repository))
     num_runs = 0
     while run_limit is None or num_runs <= run_limit:
-        logger.info('Creating TestRun #{}'.format(num_runs))
+        with session_manager() as session:
+            session.add(repository)
+            logger.info('Creating TestRun #{}'.format(num_runs))
 
-        # create an initial change, which asserts a random number of edits to
-        # the repository
-        create_synthetic_alterations_and_change(repository)
+            # create an initial change, which asserts a random number of edits to
+            # the repository
+            create_synthetic_alterations_and_change(repository)
 
-        # iteratively remove each piece of code that causes tests to fail.
-        # This means essentially removing each 'assert False' and then running
-        # the tests against each fixed up commit.
-        create_fixing_changes(repository)
+            # iteratively remove each piece of code that causes tests to fail.
+            # This means essentially removing each 'assert False' and then running
+            # the tests against each fixed up commit.
+            create_fixing_changes(repository)
 
-        # revert to beginning of the branch, and then push that commit as a
-        # new commit so we non-destructively can repeat this process with a
-        # 'fresh' branch.
-        create_reset_commit(repository)
+            # revert to beginning of the branch, and then push that commit as a
+            # new commit so we non-destructively can repeat this process with a
+            # 'fresh' branch.
+            create_reset_commit(repository)
 
-        # push all the new commits we've created
-        git_push(repository)
+            # push all the new commits we've created
+            git_push(repository)
 
-        num_runs += 1
-        break
+            num_runs += 1
 
 
 def create_fixing_changes(repository: Repository):
@@ -150,6 +151,21 @@ def create_fixing_change(repository: Repository, diffs: DiffList):
         session.add(test_run)
 
 
+def library_is_testable(repository):
+    '''
+    Returns whether or not the library is testable.  It does this by running
+    pytest --collect-only.  If there's anything in the stderr than we are
+    assuming we have altered a method that is called during import of the
+    library.  This is a huge limitation of bug_buddy.
+    '''
+    command = 'pytest --collect-only'
+    stdout, stderr = run_cmd(repository, command)
+    if stderr:
+        return False
+
+    return True
+
+
 def create_synthetic_alterations_and_change(repository: Repository):
     '''
     Creates synthetic changes to a code base, creates a commit, and then runs
@@ -167,7 +183,21 @@ def create_synthetic_alterations_and_change(repository: Repository):
     set_bug_buddy_branch(repository)
 
     # make synthetic alterations to the project
-    edit_random_routines(repository)
+    num_edits = random.randint(1, int(len(repository.get_src_files()) / 4))
+    edit_routines(repository,
+                  get_message_func=_get_assert_statement,
+                  num_edits=num_edits)
+
+    # TODO: we want to make sure we can still import the library after we have
+    # done the edits.  We definitely need a better way to do this.  This is
+    # caused when simply importing the library hits a malign edit
+    while(not library_is_testable(repository)):
+        logger.info('Unable to test against the library with current edits. '
+                    'Trying again.')
+        revert_unstaged_changes(repository)
+        edit_routines(repository,
+                      get_message_func=_get_assert_statement,
+                      num_edits=num_edits)
 
     session = Session.object_session(repository)
 
@@ -197,28 +227,46 @@ def get_routines_from_repo(repository):
     return routines
 
 
-def edit_random_routines(repository, num_edits=None):
+def edit_routines(repository,
+                  message=None,
+                  get_message_func=None,
+                  num_edits=None):
     '''
     Alters the repository in a very simplistic manner.  For right now, we are
     just going to take a method or function and add either an assert False or
     assert True to it
 
     @param repository: the code base we are changing
+    @param message: the string you want to add
+    @param get_message_func: the function to call for getting the message
+    @param num_edits: the number of edits you want to make.  Defaults to the
+                      number of routines
     '''
+    if not message and not get_message_func:
+        raise UserError('You must either specify message or get_message_func '
+                        'for synthetic_alterations.edit_routines')
+
     # contains the methods/functions across the files
-    # import pdb; pdb.set_trace()
     uneditted_routines = get_routines_from_repo(repository)
 
-    altered_routines = []
+    # edit all routines with the message if not specified
+    num_edits = num_edits or len(uneditted_routines)
 
-    if num_edits is None:
-        # at most edit only 1/10th of the routines in the repository
-        num_edits = random.randint(1, int(len(repository.get_src_files()) / 10))
+    altered_routines = []
 
     for i in range(num_edits):
         routine_index = random.randint(0, len(uneditted_routines) - 1)
         selected_routine = uneditted_routines[routine_index]
-        _add_assert_to_routine(selected_routine)
+
+        # Debugging hackery
+        # message = 'print("{} @ {} in {}")'.format(
+        #     selected_routine.node.name,
+        #     selected_routine.node.lineno,
+        #     selected_routine.file)
+        if get_message_func:
+            message = get_message_func(selected_routine)
+
+        selected_routine.prepend_statement(message)
 
         altered_routines.append(selected_routine)
 
@@ -262,11 +310,10 @@ def get_routines_from_file(repository, repo_file):
     return routines
 
 
-def _add_assert_to_routine(routine):
+def _get_assert_statement(routine):
     '''
     Adds either a assert True or assert False right after the beginning to a
     method.  Returns whether the change was innocuous or not.
     '''
     is_error_statement = random.randint(0, 1)
-    statement = ERROR_STATEMENT if is_error_statement else BENIGN_STATEMENT
-    routine.prepend_statement(statement)
+    return ERROR_STATEMENT if is_error_statement else BENIGN_STATEMENT

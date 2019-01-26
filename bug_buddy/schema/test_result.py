@@ -28,6 +28,8 @@ class TestResult(Base):
     # Whether or not the test passed or failed
     status = Column(String, nullable=False)
 
+    blames = relationship('Blame', back_populates='test_result')
+
     def __init__(self, test: Test, test_run: TestRun, status: str):
         '''
         Creates a new TestResults instance

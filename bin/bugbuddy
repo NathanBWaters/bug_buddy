@@ -4,7 +4,16 @@ import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from bug_buddy.commands import analyze, generate, initialize, delete_repository
+from bug_buddy import commands
+
+
+def _train(args):
+    '''
+    Parses arguments and passes them to the train subcommand module
+
+    @param args: the argparse arguments
+    '''
+    commands.train(args.path)
 
 
 def _analyze(args):
@@ -13,7 +22,7 @@ def _analyze(args):
 
     @param args: the argparse arguments
     '''
-    analyze(args.path)
+    commands.analyze(args.path)
 
 
 def _delete(args):
@@ -22,7 +31,7 @@ def _delete(args):
 
     @param args: the argparse arguments
     '''
-    delete_repository(args.path)
+    commands.delete_repository(args.path)
 
 
 def _generate(args):
@@ -31,7 +40,7 @@ def _generate(args):
 
     @param args: the argparse arguments
     '''
-    generate(args.repository)
+    commands.generate(args.repository)
 
 
 def _initialize(args):
@@ -40,7 +49,7 @@ def _initialize(args):
 
     @param args: the argparse arguments
     '''
-    initialize(path=args.path,
+    commands.initialize(path=args.path,
                initialize_commands=args.initialize_commands,
                test_commands=args.test_commands,
                src_directory=args.source_directory)
@@ -104,13 +113,28 @@ if __name__ == '__main__':
     ###################################
     delete_command = subparsers.add_parser(
         'delete',
-        description='Initializes a repository given a path',
-        help=('The delete subcommand will delete  by bug_buddy'))
+        description=('Deletes a repository given a path from the database and '
+                     'deletes the bug_buddy branch'),
+        help=('Deletes a repository given a path from the database and deletes '
+              'the bug_buddy branch'))
     delete_command.set_defaults(func=_delete)
     delete_command.add_argument(
         'path',
         type=str,
         help='Path to the repository you want to delete')
+
+    ###################################
+    #  Train SubCommand
+    ###################################
+    train_command = subparsers.add_parser(
+        'train',
+        description='Trains on the available data for a repository',
+        help=('Trains on the available data for a repository'))
+    train_command.set_defaults(func=_train)
+    train_command.add_argument(
+        'path',
+        type=str,
+        help='Path to the repository you want to train')
 
     args = parser.parse_args()
     args.func(args)

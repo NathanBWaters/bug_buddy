@@ -18,6 +18,12 @@ def _confirmed(user_response):
     return user_response == 'y' or user_response == 'yes'
 
 
+def train(path: str):
+    '''
+    Trains a neural network on the available data
+    '''
+
+
 def initialize(path: str,
                initialize_commands: str=None,
                test_commands: str=None,
@@ -80,7 +86,9 @@ def generate(path: str, run_limit: int=None):
             else:
                 exit('Ok, not initializing that repository')
 
-        generate_synthetic_test_results(repository, run_limit)
+        logger.info('Creating synthetic results for: {}'.format(repository))
+
+    generate_synthetic_test_results(repository, run_limit)
 
 
 def delete_repository(path: str):
@@ -93,12 +101,16 @@ def delete_repository(path: str):
     with session_manager() as session:
         repository = get(session, Repository, url=url)
 
-        msg = ('Are you sure you want to delete {}?\n'
-               'This will delete the bug_buddy branch and all data associated '
-               'with this project from the database.  (y/n)\n'
-               .format(repository))
-        should_initialize = input(msg)
+        if repository:
+            msg = ('Are you sure you want to delete {}?\n'
+                   'This will delete the bug_buddy branch and all data associated '
+                   'with this project from the database.  (y/n)\n'
+                   .format(repository))
+            should_initialize = input(msg)
 
-        if _confirmed(should_initialize):
-            delete_bug_buddy_branch(repository)
-            delete(session, repository)
+            if _confirmed(should_initialize):
+                delete_bug_buddy_branch(repository)
+                delete(session, repository)
+
+        else:
+            logger.info('No matching repo found in the database')

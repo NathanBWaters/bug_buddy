@@ -42,7 +42,10 @@ def is_repo_clean(repository: Repository):
     https://stackoverflow.com/a/45989092/4447761
     '''
     cmd = ['git', 'diff', '--exit-code']
-    child = subprocess.Popen(cmd, cwd=repository.path, stdout=subprocess.PIPE)
+    child = subprocess.Popen(cmd,
+                             cwd=repository.path,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
     child.communicate()
     return_code = child.poll()
     return return_code == 0
@@ -54,22 +57,14 @@ def set_bug_buddy_branch(repository: Repository):
     https://stackoverflow.com/a/35683029/4447761
     '''
     command = 'git checkout bug_buddy || git checkout -b bug_buddy'
-    process = subprocess.Popen(
-        command,
-        shell=True,
-        cwd=repository.path)
-    stdout, stderr = process.communicate()
+    stdout, stderr = run_cmd(repository, command)
 
     # make sure the branch is pushed remotely
     all_branches = Git(repository.path).branch('-a')
 
     if 'remotes/origin/bug_buddy' not in all_branches:
         command = 'git push --set-upstream origin bug_buddy'
-        process = subprocess.Popen(
-            command,
-            shell=True,
-            cwd=repository.path)
-        stdout, stderr = process.communicate()
+        stdout, stderr = run_cmd(repository, command)
 
 
 def get_diffs(repository: Repository,
@@ -219,14 +214,9 @@ def get_most_recent_commit(repository, branch='origin/master'):
     '''
     command = 'git log {branch} --format="%H" | head -1'.format(branch=branch)
 
-    commit_id, stderr = subprocess.Popen(
-        command,
-        shell=True,
-        cwd=repository.path,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE).communicate()
+    commit_id, stderr = run_cmd(repository, command)
 
-    return commit_id.decode("utf-8").strip()
+    return commit_id
 
 
 def get_commits_only_in_branch(repository, branch='origin/bug_buddy') -> List[str]:
@@ -252,7 +242,7 @@ def create_reset_commit(repository: Repository):
     The easiest way to do this is by simply resetting all commits in the
     bug_buddy branch and create a new commit out of that
     '''
-    logger.info('Creating reset commit')
+    logger.info('Starting to create reset commit')
     set_bug_buddy_branch(repository)
 
     bug_buddy_commits = get_commits_only_in_branch(repository,
@@ -265,12 +255,18 @@ def create_reset_commit(repository: Repository):
                .format(bug_buddy_commits=bug_buddy_commits))
     run_cmd(repository, command)
 
-    # Now create a commit for those changes
-    create_commit(repository,
-                  'reset_commit',
-                  commit_type=SYNTHETIC_RESET_CHANGE)
-
-
+    # it's possible that nothing has been changed after the git revert.
+    # For example, if the initial synthetic commit only added 'assert False'
+    # and then they were all undone. If so, then trying to create a commit
+    # when nothing is altered/staged would error.  Therefore, we have to make
+    # sure the repo is dirty before we make a commit.
+    if not is_repo_clean(repository):
+        create_commit(repository,
+                      'reset_commit',
+                      commit_type=SYNTHETIC_RESET_CHANGE)
+    else:
+        logger.info('Did not need to create reset commit since the repo is '
+                    'clean.')
 
 
 def delete_bug_buddy_branch(repository):
@@ -282,16 +278,8 @@ def delete_bug_buddy_branch(repository):
 
     # this deletes the branch in the remote server
     command = 'git push origin --delete bug_buddy'
-    process = subprocess.Popen(
-        command,
-        shell=True,
-        cwd=repository.path)
-    stdout, stderr = process.communicate()
+    stdout, stderr = run_cmd(repository, command)
 
     # delete the branch locally
     command = 'git branch -D bug_buddy'
-    process = subprocess.Popen(
-        command,
-        shell=True,
-        cwd=repository.path)
-    stdout, stderr = process.communicate()
+    stdout, stderr = run_cmd(repository, command)

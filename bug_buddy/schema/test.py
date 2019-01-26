@@ -25,6 +25,8 @@ class Test(Base):
 
     test_results = relationship('TestResult', back_populates='test')
 
+    # the relationship between this test and each routine in the code base
+
     def __init__(self,
                  repository: Repository,
                  name: str,

@@ -47,7 +47,7 @@ def run_test(repository: Repository, commit: Commit):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE)
 
-        _, _ = process.communicate()
+        stdout, stderr = process.communicate()
 
         session = Session.object_session(repository)
         test_run = create(

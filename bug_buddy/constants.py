@@ -11,12 +11,26 @@ FILE_TYPES = {
 SUCCESS = 'success'
 FAILURE = 'failure'
 
+
+########################################################
+#                       Diff Types                     #
+########################################################
+DIFF_ADDITION = 'addition'
+DIFF_SUBTRACTION = 'subtraction'
+
+
+########################################################
+#                 Synthetic Statements                 #
+########################################################
 # a statement that doesn't cause any tests to fail
 BENIGN_STATEMENT = 'assert True'
-
 # a statement that doesn't causes tests to fail
 ERROR_STATEMENT = 'assert False'
 
+
+########################################################
+#                  Type of Changes                     #
+########################################################
 # the types of changes
 DEVELOPER_CHANGE = 'developer'
 SYNTHETIC_CHANGE = 'synthetic_alteration'
