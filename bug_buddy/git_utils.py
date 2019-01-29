@@ -12,7 +12,7 @@ from bug_buddy.constants import DEVELOPER_CHANGE, SYNTHETIC_RESET_CHANGE
 from bug_buddy.db import create, Session
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
-from bug_buddy.schema import Repository, Commit, Diff
+from bug_buddy.schema import Repository, Commit, Line, Diff
 
 
 def run_cmd(repository: Repository, command: str, log=False):
@@ -67,54 +67,6 @@ def set_bug_buddy_branch(repository: Repository):
         stdout, stderr = run_cmd(repository, command)
 
 
-def get_diffs(repository: Repository,
-              starting_commit_id: str,
-              ending_commit_id: str):
-    '''
-    Returns a list of Diff instances.  This is still under the assumption that
-    we have simply added one line statements.
-    '''
-    repo = Repo(repository.path)
-
-    starting_commit = repo.commit(starting_commit_id)
-    ending_commit = repo.commit(ending_commit_id)
-
-    diff_index = starting_commit.diff(ending_commit)
-
-    diffs = []
-
-    for diff_item in diff_index.iter_change_type('M'):
-        file_at_start = diff_item.a_blob.data_stream.read().decode('utf-8').split('\n')
-        file_at_end = diff_item.b_blob.data_stream.read().decode('utf-8').split('\n')
-
-        diff = difflib.unified_diff(file_at_start,
-                                    file_at_end,
-                                    fromfile='file1',
-                                    tofile='file2',
-                                    lineterm='',
-                                    n=0)
-        lines = list(diff)
-        for i in range(len(lines)):
-            if lines[i].startswith('@@'):
-                # the diff follows the pattern.
-                #   '@@ previous_lineno, duration of addition, updated lineno'
-                #   '@@ -1381,0 +1382 @@'
-                #   '@@ -151,0 +152 @@'
-                # For more information:
-                #   https://www.wikiwand.com/en/Diff#/Unified_format
-                range_information = lines[i]
-                line_number = re.search('\+\d+', range_information).group()
-                line_number = int(line_number[1:]) - 1
-
-                added_content = lines[i + 1]
-
-                diff = Diff(added_content, line_number, diff_item.a_path)
-
-                diffs.append(diff)
-
-    return diffs
-
-
 def get_commit_id(repository: Repository) -> str:
     '''
     Given a repository, return the branch name
@@ -164,7 +116,63 @@ def create_commit(repository: Repository,
                     branch=branch,
                     commit_type=commit_type)
     logger.info('Created commit: {}'.format(commit))
+
+    # Now we need to add the lines in the diff to the database
+    add_lines_from_diff(repository, commit)
+
     return commit
+
+
+def add_lines_from_diff(repository: Repository, commit: Commit):
+    '''
+    Adds the lines of the commit diff to the database as well as set the
+    ending commits for lines that were removed
+    '''
+    assert False, 'implement me!'
+    previous_commit = get_previous_commit(commit)
+    diffs = get_diffs(repository, commit.commit_id)
+    for diff in diffs:
+        pass
+
+        repo = Repo(repository.path)
+
+    starting_commit = repo.commit(starting_commit_id)
+    ending_commit = repo.commit(ending_commit_id)
+
+    diff_index = starting_commit.diff(ending_commit)
+
+    diffs = []
+
+    for diff_item in diff_index.iter_change_type('M'):
+        file_at_start = diff_item.a_blob.data_stream.read().decode('utf-8').split('\n')
+        file_at_end = diff_item.b_blob.data_stream.read().decode('utf-8').split('\n')
+
+        diff = difflib.unified_diff(file_at_start,
+                                    file_at_end,
+                                    fromfile='file1',
+                                    tofile='file2',
+                                    lineterm='',
+                                    n=0)
+        lines = list(diff)
+        for i in range(len(lines)):
+            if lines[i].startswith('@@'):
+                # the diff follows the pattern.
+                #   '@@ previous_lineno, duration of addition, updated lineno'
+                #   '@@ -1381,0 +1382 @@'
+                #   '@@ -151,0 +152 @@'
+                # For more information:
+                #   https://www.wikiwand.com/en/Diff#/Unified_format
+                range_information = lines[i]
+                line_number = re.search('\+\d+', range_information).group()
+                line_number = int(line_number[1:]) - 1
+
+                added_content = lines[i + 1]
+
+                diff = Diff(added_content, line_number, diff_item.a_path)
+
+                diffs.append(diff)
+
+    return diffs
 
 
 def revert_commit(repository: Repository, commit: Commit):
@@ -228,6 +236,14 @@ def get_commits_only_in_branch(repository, branch='origin/bug_buddy') -> List[st
         > 48a19ebc48a5c86f2aa73ffea4fe60141bf73520
         > 80c9bbe863a077e69a37d0ef560f2553ae622ee3
         > c3b36165440c53ab5e73de88819beb3ca96b3134
+
+    @returns: list of commit strings. For example:
+        [
+            '8ce7ced9a5fe1f0b7e2cf3df1ce33b3eadc62d95',
+            '48a19ebc48a5c86f2aa73ffea4fe60141bf73520',
+            '80c9bbe863a077e69a37d0ef560f2553ae622ee3',
+            'c3b36165440c53ab5e73de88819beb3ca96b3134'
+        ]
     '''
     command = 'git log origin/master..{} --format="%H"'.format(branch)
     stdout, stderr = run_cmd(repository, command)
