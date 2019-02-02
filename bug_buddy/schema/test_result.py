@@ -28,7 +28,10 @@ class TestResult(Base):
     # Whether or not the test passed or failed
     status = Column(String, nullable=False)
 
-    blames = relationship('Blame', back_populates='test_result')
+    blame_data = relationship(
+        'BlameData',
+        back_populates='test_result',
+        cascade='all, delete, delete-orphan')
 
     def __init__(self, test: Test, test_run: TestRun, status: str):
         '''

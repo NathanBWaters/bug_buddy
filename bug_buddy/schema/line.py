@@ -9,7 +9,7 @@ from bug_buddy.schema.base import Base
 from bug_buddy.schema.commit import Commit
 
 
-class Line(Base):
+class Line(object):
     '''
     Schema representation of a Line.  It's a single line of a project.  If the
     content is changed, it becomes a new line.  Therefore it's representation

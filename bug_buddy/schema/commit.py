@@ -34,15 +34,11 @@ class Commit(Base):
                              back_populates='commit',
                              cascade='all, delete, delete-orphan')
 
-    added_lines = relationship('Line',
-                               back_populates='starting_commit',
-                               foreign_keys='Line.starting_commit_id',
-                               cascade='all, delete, delete-orphan')
-
-    removed_lines = relationship('Line',
-                                 back_populates='ending_commit',
-                                 foreign_keys='Line.ending_commit_id',
-                                 cascade='all, delete, delete-orphan')
+    # the corresponding functions histories created in this commit
+    function_histories = relationship(
+        'FunctionHistory',
+        back_populates='commit',
+        cascade='all, delete, delete-orphan')
 
     def __init__(self,
                  repository: Repository,

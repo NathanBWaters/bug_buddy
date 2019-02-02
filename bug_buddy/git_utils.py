@@ -8,11 +8,15 @@ import re
 import subprocess
 from typing import List
 
-from bug_buddy.constants import DEVELOPER_CHANGE, SYNTHETIC_RESET_CHANGE
+from bug_buddy.schema.aliases import FunctionList, DiffList
+from bug_buddy.constants import (
+    DEVELOPER_CHANGE,
+    DIFF_ADDITION,
+    SYNTHETIC_RESET_CHANGE)
 from bug_buddy.db import create, Session
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
-from bug_buddy.schema import Repository, Commit, Line, Diff
+from bug_buddy.schema import Repository, Commit, Diff
 
 
 def run_cmd(repository: Repository, command: str, log=False):
@@ -117,40 +121,60 @@ def create_commit(repository: Repository,
                     commit_type=commit_type)
     logger.info('Created commit: {}'.format(commit))
 
-    # Now we need to add the lines in the diff to the database
-    add_lines_from_diff(repository, commit)
+    # Set the function history for the commit.  Mark which ones were changed,
+    # etc
+    add_function_histories(repository, commit)
 
     return commit
 
 
-def add_lines_from_diff(repository: Repository, commit: Commit):
+def add_function_histories(repository: Repository, commit: Commit):
     '''
-    Adds the lines of the commit diff to the database as well as set the
-    ending commits for lines that were removed
+    Adds the FunctionHistory for each function in the commit.  It adds
+    information such as whether or not it was changed.
     '''
-    assert False, 'implement me!'
-    previous_commit = get_previous_commit(commit)
-    diffs = get_diffs(repository, commit.commit_id)
+    pass
+
+
+def get_altered_functions(repository: Repository) -> FunctionList:
+    '''
+    Given a set of diffs and functions, it will return which functions were
+    altered.
+    '''
+    diffs = get_diffs(repository)
+    functions = repository.get_functions()
+
+    import pdb; pdb.set_trace()
+
+    # store which functions were altered using the diffs
+    altered_functions = []
     for diff in diffs:
-        pass
+        # limit the functions to the functions in the file as the diff
+        functions_in_file = [function for function in functions
+                             if function.file_path == diff.file_path]
 
-        repo = Repo(repository.path)
 
-    starting_commit = repo.commit(starting_commit_id)
-    ending_commit = repo.commit(ending_commit_id)
 
-    diff_index = starting_commit.diff(ending_commit)
+def get_diffs(repository: Repository) -> DiffList:
+    '''
+    Returns a list of diffs from a repository
+    '''
+    commits = Repo(repository.path).iter_commits()
+    current_commit, previous_commit = list(commits)[0:2]
 
+    diff_data = current_commit.diff(previous_commit)
     diffs = []
 
-    for diff_item in diff_index.iter_change_type('M'):
-        file_at_start = diff_item.a_blob.data_stream.read().decode('utf-8').split('\n')
-        file_at_end = diff_item.b_blob.data_stream.read().decode('utf-8').split('\n')
+    for diff_item in diff_data.iter_change_type('M'):
+        file_before = diff_item.b_blob.data_stream.read().decode('utf-8').split('\n')
+        file_after = diff_item.a_blob.data_stream.read().decode('utf-8').split('\n')
 
-        diff = difflib.unified_diff(file_at_start,
-                                    file_at_end,
-                                    fromfile='file1',
-                                    tofile='file2',
+        fromfile = '{} @ {}'.format(diff_item.a_blob.path, current_commit.hexsha)
+        tofile = '{} @ {}'.format(diff_item.b_blob.path, current_commit.hexsha)
+        diff = difflib.unified_diff(file_before,
+                                    file_after,
+                                    fromfile=fromfile,
+                                    tofile=tofile,
                                     lineterm='',
                                     n=0)
         lines = list(diff)
@@ -168,7 +192,10 @@ def add_lines_from_diff(repository: Repository, commit: Commit):
 
                 added_content = lines[i + 1]
 
-                diff = Diff(added_content, line_number, diff_item.a_path)
+                diff = Diff(added_content,
+                            line_number,
+                            diff_item.a_path,
+                            DIFF_ADDITION)
 
                 diffs.append(diff)
 

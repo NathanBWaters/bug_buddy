@@ -2,12 +2,13 @@
 '''
 Code for communicating with the bug_buddy database
 '''
+import ast
 from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from bug_buddy.errors import BugBuddyError
-from bug_buddy.schema import Base, Repository
+from bug_buddy.schema import Base, Repository, Function
 
 
 # Create an engine that stores data in the local directory's
@@ -44,6 +45,15 @@ def get(session, sql_class, **kwargs):
     return class_instance
 
 
+def get_all(session, sql_class, **kwargs):
+    '''
+    Used to get all instances of a class that matche the kwargs parameters
+    '''
+    query = session.query(sql_class)
+    class_instances = query.filter_by(**kwargs).all()
+    return class_instances
+
+
 def create(session, sql_class, **kwargs):
     '''
     Used to get a single instance of a class that matches the kwargs parameters
@@ -63,6 +73,32 @@ def get_or_create(session, sql_class, **kwargs):
 
     class_instance = create(session, sql_class, **kwargs)
     return class_instance, False
+
+
+def get_or_create_function(session,
+                           repository: Repository,
+                           node: ast.Node,
+                           file_path: str):
+    '''
+    Given a function's ast information, return the function from the database
+    if it exists.  Otherwise, create the new function.
+    '''
+    matching_functions = get_all(
+        session,
+        Function,
+        repository=repository,
+        name=node.name)
+
+    # if there are no matching functions, then create the new Function instance
+    if not matching_functions:
+        return create(session, Function, ast, file_path)
+
+    # the matching function is most likely the function with the line number
+    # closest to the function's current line number in the source code.  This
+    # is necessary for the case where a file has multiple functions with the
+    # same name
+    return min([abs(function.line_number - ast.lineno)
+                for function in matching_functions])
 
 
 def delete(session, sql_instance):

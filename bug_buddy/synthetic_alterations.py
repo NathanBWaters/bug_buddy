@@ -26,6 +26,7 @@ import re
 import sys
 from typing import List
 
+from bug_buddy.schema.aliases import DiffList
 from bug_buddy.blaming import blame
 from bug_buddy.constants import (BENIGN_STATEMENT,
                                  ERROR_STATEMENT,
@@ -44,11 +45,8 @@ from bug_buddy.git_utils import (get_most_recent_commit,
                                  set_bug_buddy_branch)
 from bug_buddy.runner import run_test
 from bug_buddy.logger import logger
-from bug_buddy.schema import Repository, Routine, TestRun, Commit, Diff
-from bug_buddy.source import edit_routines
-
-# aliases for typing
-DiffList = List[Diff]
+from bug_buddy.schema import Repository, Function, TestRun, Commit, Diff
+from bug_buddy.source import edit_functions
 
 
 def generate_synthetic_test_results(repository: Repository, run_limit: int):
@@ -61,8 +59,8 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
             session.add(repository)
             logger.info('Creating TestRun #{}'.format(num_runs))
 
-            # create an initial change, which asserts a random number of edits to
-            # the repository
+            # create an initial change, which asserts a random number of edits
+            # to the repository.  This also create the function history
             commit = create_synthetic_alterations(repository)
 
             # run all tests against the synthetic change
@@ -153,9 +151,9 @@ def create_synthetic_alterations(repository: Repository):
 
     # make synthetic alterations to the project
     num_edits = random.randint(1, int(len(repository.get_src_files()) / 4))
-    edit_routines(repository,
-                  get_message_func=_get_assert_statement,
-                  num_edits=num_edits)
+    edit_functions(repository,
+                   get_message_func=_get_assert_statement,
+                   num_edits=num_edits)
 
     # TODO: we want to make sure we can still import the library after we have
     # done the edits.  We definitely need a better way to do this.  This is
@@ -164,9 +162,9 @@ def create_synthetic_alterations(repository: Repository):
         logger.info('Unable to test against the library with current edits. '
                     'Trying again.')
         revert_unstaged_changes(repository)
-        edit_routines(repository,
-                      get_message_func=_get_assert_statement,
-                      num_edits=num_edits)
+        edit_functions(repository,
+                       get_message_func=_get_assert_statement,
+                       num_edits=num_edits)
 
     session = Session.object_session(repository)
 
@@ -179,7 +177,7 @@ def create_synthetic_alterations(repository: Repository):
     return commit
 
 
-def _get_assert_statement(routine):
+def _get_assert_statement(repo_function):
     '''
     Adds either a assert True or assert False right after the beginning to a
     method.  Returns whether the change was innocuous or not.
