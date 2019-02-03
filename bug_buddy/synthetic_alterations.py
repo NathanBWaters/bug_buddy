@@ -35,14 +35,15 @@ from bug_buddy.constants import (BENIGN_STATEMENT,
                                  SYNTHETIC_FIXING_CHANGE)
 from bug_buddy.db import session_manager, Session
 from bug_buddy.errors import UserError
-from bug_buddy.git_utils import (get_most_recent_commit,
-                                 is_repo_clean,
-                                 create_commit,
-                                 git_push,
+from bug_buddy.git_utils import (create_commit,
+                                 create_data_from_commit,
                                  create_reset_commit,
+                                 git_push,
+                                 is_repo_clean,
                                  revert_unstaged_changes,
                                  run_cmd,
-                                 set_bug_buddy_branch)
+                                 set_bug_buddy_branch,
+                                 update_commit)
 from bug_buddy.runner import run_test
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, Function, TestRun, Commit, Diff
@@ -59,8 +60,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
             session.add(repository)
             logger.info('Creating TestRun #{}'.format(num_runs))
 
-            # create an initial change, which asserts a random number of edits
-            # to the repository.  This also create the function history
+            # Adds a random number of edits to the repository.
             commit = create_synthetic_alterations(repository)
 
             # run all tests against the synthetic change
@@ -140,6 +140,7 @@ def create_synthetic_alterations(repository: Repository):
     are either 'assert False' or 'assert True'.
 
     @param repository: the code base we are changing
+    @param commit: the empty commit we're adding changes to
     '''
     if not is_repo_clean(repository):
         msg = ('You attempted to work on an unclean repository.  Please run: \n'
@@ -166,14 +167,17 @@ def create_synthetic_alterations(repository: Repository):
                        get_message_func=_get_assert_statement,
                        num_edits=num_edits)
 
-    session = Session.object_session(repository)
-
+    # Create a commit from the edits
     commit = create_commit(repository,
                            name='synthetic_alteration_change',
                            commit_type=SYNTHETIC_CHANGE)
 
-    # add the commit and test run to our database
+    session = Session.object_session(repository)
     session.add(commit)
+
+    # Store the function history data and the diffs
+    create_data_from_commit(repository, commit)
+
     return commit
 
 

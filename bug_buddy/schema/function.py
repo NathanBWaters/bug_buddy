@@ -29,7 +29,7 @@ class Function(Base):
     line_number = Column(Integer, nullable=False)
 
     # relative path to file from the root of the repository
-    path = Column(String(500), nullable=False)
+    file_path = Column(String(500), nullable=False)
 
     # relative path to file
     repository_id = Column(Integer, ForeignKey('repository.id'))
@@ -44,7 +44,7 @@ class Function(Base):
                  repository,  # Repository - need to figure out typing for
                               # in cases where they both refer to each other
                  node: ast.AST,
-                 path: str):
+                 file_path: str):
         '''
         Creates a new Function instance.
         '''
@@ -52,7 +52,7 @@ class Function(Base):
         self.node = node
         self.name = node.name
         self.line_number = node.lineno
-        self.path = path
+        self.file_path = file_path
 
     @property
     def ast_node(self):
@@ -85,7 +85,7 @@ class Function(Base):
         '''
         Returns the absolute path
         '''
-        return os.path.join(self.repository.path, self.path)
+        return os.path.join(self.repository.path, self.file_path)
 
     def prepend_statement(self, statement):
         '''
@@ -108,10 +108,10 @@ class Function(Base):
                             function_name=self.ast_node.name,
                             lineno=self.ast_node.lineno))
         first_node = self.ast_node.body[0]
-        first_function_in_function = first_node.lineno
+        first_line_in_function = first_node.lineno
 
         # scoot down one function if the first node is a comment
-        first_function_in_function += 1 if _is_comment(first_node) else 0
+        first_line_in_function += 1 if _is_comment(first_node) else 0
 
         # note that a comment after the function does not seem to have a
         # column offset, and instead returns -1.
@@ -120,19 +120,20 @@ class Function(Base):
         indentation = ' ' * column_offset
         statement = indentation + statement + '\n'
 
-        with open(self.file_path, 'r') as f:
+        with open(self.abs_path, 'r') as f:
             contents = f.readlines()
 
-        contents.insert(first_function_in_function - 1, statement)
+        contents.insert(first_line_in_function - 1, statement)
 
-        with open(self.file_path, 'w') as f:
+        with open(self.abs_path, 'w') as f:
             f.writelines(contents)
 
     def __repr__(self):
         '''
         Converts the Function into a string
         '''
-        return ('<Function {name} | {file} | {function} />'
+        return ('<Function {name} | {file} | {first_line}-{last_line} />'
                 .format(name=self.ast_node.name,
                         file=self.file_path,
-                        function=self.ast_node.lineno))
+                        first_line=self.first_line,
+                        last_line=self.last_line))

@@ -59,7 +59,7 @@ def create(session, sql_class, **kwargs):
     Used to get a single instance of a class that matches the kwargs parameters
     '''
     new_class_instance = sql_class(**kwargs)
-    session.merge(new_class_instance)
+    session.add(new_class_instance)
     return new_class_instance
 
 
@@ -77,11 +77,11 @@ def get_or_create(session, sql_class, **kwargs):
 
 def get_or_create_function(session,
                            repository: Repository,
-                           node: ast.Node,
+                           node,
                            file_path: str):
     '''
-    Given a function's ast information, return the function from the database
-    if it exists.  Otherwise, create the new function.
+    Given a function's ast node information, return the function from the
+    database if it exists.  Otherwise, create the new function.
     '''
     matching_functions = get_all(
         session,
@@ -91,14 +91,23 @@ def get_or_create_function(session,
 
     # if there are no matching functions, then create the new Function instance
     if not matching_functions:
-        return create(session, Function, ast, file_path)
+        return create(session,
+                      Function,
+                      repository=repository,
+                      node=node,
+                      file_path=file_path)
 
     # the matching function is most likely the function with the line number
     # closest to the function's current line number in the source code.  This
     # is necessary for the case where a file has multiple functions with the
     # same name
-    return min([abs(function.line_number - ast.lineno)
-                for function in matching_functions])
+    matching_function = min(
+        matching_functions,
+        key=lambda function: abs(function.line_number - node.lineno))
+
+    # we must set the node information
+    matching_function.node = node
+    return matching_function
 
 
 def delete(session, sql_instance):

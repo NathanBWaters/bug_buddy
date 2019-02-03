@@ -6,6 +6,7 @@ from git import Repo
 from git.cmd import Git
 import re
 import subprocess
+import sys
 from typing import List
 
 from bug_buddy.schema.aliases import FunctionList, DiffList
@@ -13,10 +14,11 @@ from bug_buddy.constants import (
     DEVELOPER_CHANGE,
     DIFF_ADDITION,
     SYNTHETIC_RESET_CHANGE)
-from bug_buddy.db import create, Session
+from bug_buddy.db import create, Session, get
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
-from bug_buddy.schema import Repository, Commit, Diff
+from bug_buddy.schema import Commit, Diff, FunctionHistory, Repository
+from bug_buddy.source import get_functions_from_repo
 
 
 def run_cmd(repository: Repository, command: str, log=False):
@@ -94,12 +96,15 @@ def get_branch_name(repository: Repository) -> str:
 
 def create_commit(repository: Repository,
                   name: str=None,
-                  commit_type: str=DEVELOPER_CHANGE) -> Commit:
+                  commit_type: str=DEVELOPER_CHANGE,
+                  allow_empty=False) -> Commit:
     '''
     Given a repository, create a commit
 
     @param repository: the repository to be analyzed
-    @param run: the run to be analyzed
+    @param name: the commit name/message
+    @param commit_type: metadata about the commit
+    @param empty: whether or not the commit is empty
     '''
     commit_name = name or 'bug_buddy_synthetic_commit'
     # You should only create commits on the "bug_buddy" branch
@@ -107,7 +112,10 @@ def create_commit(repository: Repository,
 
     Git(repository.path).add('-A')
 
-    Git(repository.path).commit('-m "{}"'.format(commit_name))
+    Git(repository.path).commit(
+        '-m "{commit_name}" {allow_empty}'
+        .format(commit_name=commit_name,
+                allow_empty='--allow-empty' if allow_empty else ''))
 
     commit_id = get_commit_id(repository)
     branch = get_branch_name(repository)
@@ -121,11 +129,19 @@ def create_commit(repository: Repository,
                     commit_type=commit_type)
     logger.info('Created commit: {}'.format(commit))
 
-    # Set the function history for the commit.  Mark which ones were changed,
-    # etc
-    add_function_histories(repository, commit)
-
     return commit
+
+
+def update_commit(repository: Repository):
+    '''
+    Updates the commit with the altered local space
+
+    @param repository: the repository with the commit to be updated
+    '''
+    Git(repository.path).add('-A')
+
+    # git commit --amend
+    Git(repository.path).commit('--amend')
 
 
 def add_function_histories(repository: Repository, commit: Commit):
@@ -133,26 +149,75 @@ def add_function_histories(repository: Repository, commit: Commit):
     Adds the FunctionHistory for each function in the commit.  It adds
     information such as whether or not it was changed.
     '''
-    pass
+    assert False, 'implement add_function_histories'
 
 
-def get_altered_functions(repository: Repository) -> FunctionList:
+def create_data_from_commit(repository: Repository, commit: Commit) -> FunctionList:
     '''
-    Given a set of diffs and functions, it will return which functions were
-    altered.
+    Given a commit, store the necessary data such as the FunctionHistory and
+    Diff instances.
     '''
-    diffs = get_diffs(repository)
-    functions = repository.get_functions()
-
-    import pdb; pdb.set_trace()
-
+    session = Session.object_session(repository)
     # store which functions were altered using the diffs
+    functions = get_functions_from_repo(repository)
+    altered_functions = get_altered_functions(repository,
+                                              commit,
+                                              functions=functions)
+
+    # create FunctionHistory instances
+    for function in functions:
+        altered = True if function in altered_functions else False
+        create(session,
+               FunctionHistory,
+               function=function,
+               commit=commit,
+               altered=altered)
+
+
+def get_altered_functions(repository: Repository,
+                          commit: Commit,
+                          functions: FunctionList=[]) -> FunctionList:
+    '''
+    Given a repository and commit, return the functions that were altered.
+
+    @repository: the repository that we are retrieving the functions from
+    @commit: the commit that we are retrieving functions from
+    @functions: if we already have the functions, we can pass them in so we
+                do not have to retrieve the functions twice from source code
+    '''
+    if not functions:
+        functions = get_functions_from_repo(repository)
+
+    diffs = get_diffs(repository)
+
     altered_functions = []
     for diff in diffs:
-        # limit the functions to the functions in the file as the diff
-        functions_in_file = [function for function in functions
-                             if function.file_path == diff.file_path]
+        # To find the corresponding function for the diff, we need to first
+        # limit it to the same file and then see which functions encompass that
+        # diff using line numbers.
+        matching_functions = []
+        for function in functions:
+            if (function.file_path == diff.file_path and
+                    function.first_line <= diff.line_number and
+                    function.last_line >= diff.line_number):
+                matching_functions.append(function)
 
+        if not matching_functions:
+            raise BugBuddyError('No matching function for diff: {}'.format(diff))
+
+        # there's a change that multiple functions encompass the diff if there
+        # are nested functions.  So we use the function that most tightly
+        # encompasses the diff
+        matching_function = None
+        tighest_fit = sys.maxsize
+        for function in matching_functions:
+            if ((diff.line_number - function.first_line +
+                 function.last_line - diff.line_number) < tighest_fit):
+                matching_function = function
+
+        altered_functions.append(matching_function)
+
+    altered_functions
 
 
 def get_diffs(repository: Repository) -> DiffList:
@@ -188,7 +253,7 @@ def get_diffs(repository: Repository) -> DiffList:
                 #   https://www.wikiwand.com/en/Diff#/Unified_format
                 range_information = lines[i]
                 line_number = re.search('\+\d+', range_information).group()
-                line_number = int(line_number[1:]) - 1
+                line_number = int(line_number[1:])
 
                 added_content = lines[i + 1]
 
@@ -242,16 +307,18 @@ def get_repository_url_from_path(path: str):
     return Repo(path).remotes.origin.url
 
 
-def get_most_recent_commit(repository, branch='origin/master'):
+def get_most_recent_commit(repository, branch='bug_buddy') -> Commit:
     '''
     Returns the latest commit from the specified branch.  Defaults to the latest
     in master
     '''
+    session = Session.object_session(repository)
     command = 'git log {branch} --format="%H" | head -1'.format(branch=branch)
 
     commit_id, stderr = run_cmd(repository, command)
 
-    return commit_id
+    commit = get(session, Commit, commit_id=commit_id)
+    return commit
 
 
 def get_commits_only_in_branch(repository, branch='origin/bug_buddy') -> List[str]:

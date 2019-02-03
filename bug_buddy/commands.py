@@ -8,6 +8,7 @@ from bug_buddy.schema import Repository
 from bug_buddy.git_utils import (delete_bug_buddy_branch,
                                  get_repository_url_from_path,
                                  get_repository_name_from_url)
+from bug_buddy.source import get_functions_from_repo
 from bug_buddy.synthetic_alterations import generate_synthetic_test_results
 
 
@@ -53,8 +54,14 @@ def initialize(path: str,
             test_commands=test_commands,
             src_directory=src_directory,
             path=path)
-    logger.info('Your repository "{}" has been successfully created!'
-                .format(repository))
+
+        session.commit()
+
+        logger.info('Importing data from source...')
+        get_functions_from_repo(repository)
+
+        logger.info('Your repository "{}" has been successfully created!'
+                    .format(repository))
 
 
 def analyze(repository_name: str):

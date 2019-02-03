@@ -6,11 +6,11 @@ import os
 import random
 from typing import List
 
-from bug_buddy.constants import PYTHON_FILE_TYPE
-from bug_buddy.db import get_or_create_function, Session
+from bug_buddy.constants import PYTHON_FILE_TYPE, DIFF_ADDITION
+from bug_buddy.db import get_or_create_function, create, Session
 from bug_buddy.errors import UserError
 from bug_buddy.logger import logger
-from bug_buddy.schema import Repository, Function
+from bug_buddy.schema import Commit, Function, Repository
 
 
 def edit_functions(repository: Repository,
@@ -23,6 +23,7 @@ def edit_functions(repository: Repository,
     assert True to it
 
     @param repository: the code base we are changing
+    @param commit: the currently empty commit we'll be adding changes to
     @param message: the string you want to add
     @param get_message_func: the function to call for getting the message
     @param num_edits: the number of edits you want to make.  Defaults to the
@@ -96,7 +97,8 @@ def get_functions_from_repo(repository: Repository):
 
 def get_functions_from_file(repository: Repository, repo_file: str):
     '''
-    Returns the methods and functions from the file
+    Returns the functions from the file.  They're created in the database if
+    do not already exist
     '''
     functions = []
 
@@ -106,12 +108,13 @@ def get_functions_from_file(repository: Repository, repo_file: str):
         repo_module = ast.parse(repo_file_content)
         for node in ast.walk(repo_module):
             if isinstance(node, ast.FunctionDef):
-                file_path = os.path.relpath(repository.path, repo_file)
+                relative_file_path = os.path.relpath(repo_file, repository.path)
+
                 function = get_or_create_function(
                     session,
                     repository=repository,
                     node=node,
-                    file_path=file_path,
+                    file_path=relative_file_path,
                 )
                 functions.append(function)
 
