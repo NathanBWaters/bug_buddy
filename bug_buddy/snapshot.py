@@ -62,7 +62,8 @@ def save_function_histories(repository: Repository,
             FunctionHistory,
             function=function,
             commit=commit,
-            line_number=function.first_line,
+            first_line=function.first_line,
+            last_line=function.last_line,
             altered=was_altered)
 
 

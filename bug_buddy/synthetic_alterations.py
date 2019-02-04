@@ -63,11 +63,14 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
             # Adds a random number of edits to the repository.
             commit = create_synthetic_alterations(repository)
 
+            # Store the data of the commit in the database
+            snapshot(repository, commit)
+
             # run all tests against the synthetic change
             test_run = run_test(repository, commit)
 
-            # determine which lines caused which test failures
-            blame(repository, test_run)
+            # determine which diffs caused which test failures
+            # blame(repository, test_run)
 
             # revert to beginning of the branch, and then push that commit as a
             # new commit so we non-destructively can repeat this process with a
@@ -174,9 +177,6 @@ def create_synthetic_alterations(repository: Repository):
 
     session = Session.object_session(repository)
     session.add(commit)
-
-    # Store the function history data and the diffs
-    snapshot(repository, commit)
 
     return commit
 

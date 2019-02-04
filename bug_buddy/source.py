@@ -149,8 +149,8 @@ def get_altered_functions(repository: Repository,
         matching_functions = []
         for function in functions:
             if (function.file_path == diff.file_path and
-                    function.first_line <= diff.line_number and
-                    function.last_line >= diff.line_number):
+                    function.first_line <= diff.first_line and
+                    function.last_line >= diff.last_line):
                 matching_functions.append(function)
 
         if not matching_functions:
@@ -203,7 +203,7 @@ def get_function(repository: Repository,
     '''
     session = Session.object_session(repository)
 
-    matching_functions = get_all(
+    potential_matching_functions = get_all(
         session,
         Function,
         repository=repository,
@@ -212,7 +212,7 @@ def get_function(repository: Repository,
 
     # we have found a possible matching function.  We now need to make sure
     # that we have the correct matching function by comparing the line numbers
-    if matching_functions:
+    if potential_matching_functions:
         if not diffs:
             diffs = get_diffs(repository, commit)
 
@@ -225,25 +225,34 @@ def get_function(repository: Repository,
         # matching function's latest FunctionHistory.line_number.
         affecting_diffs = [
             diff for diff in diffs if file_path == diff.file_path and
-            diff.first_line <= node.lineno]
+            diff.first_line <= node.lineno
+        ]
 
         diff_impact = 0
         if affecting_diffs:
             # The file was altered, so we now need to know how many lines were
             # added or subtracted above the function.
             diff_impact = sum([diff.size_difference for diff in affecting_diffs])
+            logger.info('The following diffs are adding "{}" lines: {}'
+                        .format(diff_impact, diffs))
 
-        for function in matching_functions:
+        for function in potential_matching_functions:
             # if the function does not have node history, then that means it
-            # is a new function
+            # is a new function that has not gone through the snapshot process
             if not function.function_history:
                 continue
 
-            if node.lineno == function.latest_history.line_number + diff_impact:
+            if node.lineno == function.latest_history.first_line + diff_impact:
+                function.node = node
                 logger.info('We found the corresponding Function instance: {}'
                             .format(function))
-                function.node = node
                 return function
+
+        import pdb; pdb.set_trace()
+        logger.info('The following potential_matching_functions did not match  '
+                    'the node line number "{lineno}": {functions}'
+                    .format(lineno=node.lineno,
+                            functions=potential_matching_functions))
 
     # There are no perfectly matching fucntions so we therefore will return
     # a new Function instance. We do not store the function at this point

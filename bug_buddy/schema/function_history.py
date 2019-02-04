@@ -21,8 +21,9 @@ class FunctionHistory(Base):
     __tablename__ = 'function_history'
     id = Column(Integer, primary_key=True)
 
-    # the line number of the function at the commit
-    line_number = Column(Integer, nullable=False)
+    # the first and last line number of the function at the commit
+    first_line = Column(Integer, nullable=False)
+    last_line = Column(Integer, nullable=False)
 
     # whether or not the function was altered in the commit
     altered = Column(Boolean, nullable=False)
@@ -41,21 +42,22 @@ class FunctionHistory(Base):
     def __init__(self,
                  function: Function,
                  commit: Commit,
-                 line_number: int,
+                 first_line: int,
+                 last_line: int,
                  altered: bool):
         '''
         Creates a new FunctionHistory instance.
         '''
         self.function = function
         self.commit = commit
-        self.line_number = line_number
+        self.first_line = first_line
+        self.last_line = last_line
         self.altered = altered
 
     def __repr__(self):
         '''
         Converts the FunctionHistory into a string
         '''
-        return ('<FunctionHistory {name} | {file} | {function} />'
-                .format(name=self.ast_node.name,
-                        file=self.file_path,
-                        function=self.ast_node.lineno))
+        return ('<FunctionHistory {name} | {file} />'
+                .format(name=self.function.name,
+                        commit=self.commit.commit_id))

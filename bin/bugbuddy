@@ -40,7 +40,7 @@ def _generate(args):
 
     @param args: the argparse arguments
     '''
-    commands.generate(args.repository)
+    commands.generate(args.repository, run_limit=int(args.num_runs))
 
 
 def _initialize(args):
@@ -49,10 +49,11 @@ def _initialize(args):
 
     @param args: the argparse arguments
     '''
-    commands.initialize(path=args.path,
-               initialize_commands=args.initialize_commands,
-               test_commands=args.test_commands,
-               src_directory=args.source_directory)
+    commands.initialize(
+        path=args.path,
+        initialize_commands=args.initialize_commands,
+        test_commands=args.test_commands,
+        src_directory=args.source_directory)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(

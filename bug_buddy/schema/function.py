@@ -56,11 +56,17 @@ class Function(Base):
         Returns the AST node representation of the function.  If it is not
         already loaded, it will retrieve it from the source file
         '''
-        if not self.node:
+        if not self.loaded_node():
             msg = 'you need to load the ast node for {}'.format(self.name)
             raise Exception(msg)
 
         return self.node
+
+    def loaded_node(self):
+        '''
+        Returns whether or not the AST node for the function has been loaded
+        '''
+        return hasattr(self, 'node')
 
     @property
     def latest_history(self):
@@ -69,19 +75,38 @@ class Function(Base):
         '''
         return self.function_history[0]
 
+    def has_line_info(self):
+        '''
+        Returns whether or not the function can return representative line
+        information
+        '''
+        return self.loaded_node() or len(self.function_history) > 0
+
     @property
     def first_line(self):
         '''
         Returns the first line in the function
         '''
-        return self.ast_node.lineno
+        if self.has_line_info():
+            if self.loaded_node():
+                return self.ast_node.lineno
+
+            return self.latest_history.first_line
+
+        return -1
 
     @property
     def last_line(self):
         '''
         Returns the last line in the function
         '''
-        return self.ast_node.body[-1].lineno
+        if self.has_line_info():
+            if self.loaded_node():
+                return self.ast_node.body[-1].lineno
+
+            return self.latest_history.last_line
+
+        return -1
 
     @property
     def abs_path(self):
@@ -137,7 +162,7 @@ class Function(Base):
         Converts the Function into a string
         '''
         return ('<Function {name} | {file} | {first_line}-{last_line} />'
-                .format(name=self.ast_node.name,
+                .format(name=self.name,
                         file=self.file_path,
                         first_line=self.first_line,
                         last_line=self.last_line))

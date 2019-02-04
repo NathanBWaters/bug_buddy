@@ -308,24 +308,31 @@ def get_diffs(repository: Repository, commit: Commit=None) -> DiffList:
     '''
     Returns a list of diffs from a repository
     '''
-    # TODO - if commit is specified, use that commit.  Otherwise just use the
-    # two latest commits in the repository
-    commits = Repo(repository.path).iter_commits()
-    current_commit, previous_commit = list(commits)[0:2]
+    import pdb; pdb.set_trace()
+    # if we have a commit, compare the commit with it's previous commit
+    if commit:
+        # TODO - if commit is specified, use that commit.  Otherwise just use the
+        # two latest commits in the repository
+        commits = Repo(repository.path).iter_commits()
+        current_tree, previous_commit = list(commits)[0:2]
+        diff_data = current_tree.diff(previous_commit, create_patch=True)
 
-    diff_data = current_commit.diff(previous_commit)
+    # otherwise, we are trying to compare the local diff with the previous
+    # commit
+    else:
+        # how we can compare the latest commit to the current tree
+        diff_data = Repo(repository.path).head.commit.diff(None, create_patch=True)
+
     diffs = []
 
     for diff_item in diff_data.iter_change_type('M'):
         file_before = diff_item.b_blob.data_stream.read().decode('utf-8').split('\n')
         file_after = diff_item.a_blob.data_stream.read().decode('utf-8').split('\n')
 
-        fromfile = '{} @ {}'.format(diff_item.a_blob.path, current_commit.hexsha)
-        tofile = '{} @ {}'.format(diff_item.b_blob.path, current_commit.hexsha)
         diff = difflib.unified_diff(file_before,
                                     file_after,
-                                    fromfile=fromfile,
-                                    tofile=tofile,
+                                    fromfile='previous',
+                                    tofile='current',
                                     lineterm='',
                                     n=0)
         lines = list(diff)
