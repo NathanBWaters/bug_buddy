@@ -7,6 +7,7 @@ from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
+from bug_buddy.errors import BugBuddyError
 from bug_buddy.constants import FAILURE, SYNTHETIC_CHANGE
 from bug_buddy.schema.base import Base
 from bug_buddy.schema.repository import Repository
@@ -40,6 +41,12 @@ class Commit(Base):
         back_populates='commit',
         cascade='all, delete, delete-orphan')
 
+    # the corresponding diffs created in this commit
+    diffs = relationship(
+        'Diff',
+        back_populates='commit',
+        cascade='all, delete, delete-orphan')
+
     def __init__(self,
                  repository: Repository,
                  commit_id: str,
@@ -48,6 +55,10 @@ class Commit(Base):
         '''
         Creates a new TestResults instance
         '''
+        if not commit_id:
+            msg = 'Tried creating commit without a commit_id'
+            raise BugBuddyError(msg)
+
         self.repository = repository
         self.commit_id = commit_id
         self.branch = branch

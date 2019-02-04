@@ -25,9 +25,6 @@ class Function(Base):
     # the content of the function
     name = Column(String(500), nullable=False)
 
-    # the original line number of the function when it was first introduced
-    line_number = Column(Integer, nullable=False)
-
     # relative path to file from the root of the repository
     file_path = Column(String(500), nullable=False)
 
@@ -51,7 +48,6 @@ class Function(Base):
         self.repository = repository
         self.node = node
         self.name = node.name
-        self.line_number = node.lineno
         self.file_path = file_path
 
     @property
@@ -67,11 +63,18 @@ class Function(Base):
         return self.node
 
     @property
+    def latest_history(self):
+        '''
+        Returns the most recent history
+        '''
+        return self.function_history[0]
+
+    @property
     def first_line(self):
         '''
         Returns the first line in the function
         '''
-        return self.ast_node.body[0].lineno
+        return self.ast_node.lineno
 
     @property
     def last_line(self):
@@ -102,11 +105,6 @@ class Function(Base):
 
         # Get the first node in the function, which is it's first statement.
         # We will add the statement here
-        logger.info('Adding "{statement}" to {file} | {function_name}@{lineno}'
-                    .format(statement=statement,
-                            file=self.file_path,
-                            function_name=self.ast_node.name,
-                            lineno=self.ast_node.lineno))
         first_node = self.ast_node.body[0]
         first_line_in_function = first_node.lineno
 
@@ -118,15 +116,21 @@ class Function(Base):
         column_offset = (first_node.col_offset if first_node.col_offset != -1
                          else self.ast_node.col_offset + 4)
         indentation = ' ' * column_offset
-        statement = indentation + statement + '\n'
+        indented_statement = indentation + statement + '\n'
 
         with open(self.abs_path, 'r') as f:
             contents = f.readlines()
 
-        contents.insert(first_line_in_function - 1, statement)
+        contents.insert(first_line_in_function - 1, indented_statement)
 
         with open(self.abs_path, 'w') as f:
             f.writelines(contents)
+
+        logger.info('Added "{statement}" to {file} | {function_name}@{lineno}'
+                    .format(statement=statement,
+                            file=self.file_path,
+                            function_name=self.ast_node.name,
+                            lineno=first_line_in_function))
 
     def __repr__(self):
         '''

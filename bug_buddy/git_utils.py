@@ -6,10 +6,9 @@ from git import Repo
 from git.cmd import Git
 import re
 import subprocess
-import sys
 from typing import List
 
-from bug_buddy.schema.aliases import FunctionList, DiffList
+from bug_buddy.schema.aliases import DiffList
 from bug_buddy.constants import (
     DEVELOPER_CHANGE,
     DIFF_ADDITION,
@@ -17,8 +16,7 @@ from bug_buddy.constants import (
 from bug_buddy.db import create, Session, get
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
-from bug_buddy.schema import Commit, Diff, FunctionHistory, Repository
-from bug_buddy.source import get_functions_from_repo
+from bug_buddy.schema import Commit, Diff, Repository
 
 
 def run_cmd(repository: Repository, command: str, log=False):
@@ -106,7 +104,8 @@ def create_commit(repository: Repository,
     @param commit_type: metadata about the commit
     @param empty: whether or not the commit is empty
     '''
-    commit_name = name or 'bug_buddy_synthetic_commit'
+    commit_name = name or 'bug_buddy_commit'
+
     # You should only create commits on the "bug_buddy" branch
     set_bug_buddy_branch(repository)
 
@@ -118,9 +117,19 @@ def create_commit(repository: Repository,
                 allow_empty='--allow-empty' if allow_empty else ''))
 
     commit_id = get_commit_id(repository)
+    return _store_commit(repository, commit_id, commit_type)
+
+
+def _store_commit(repository: Repository,
+                  commit_id: str,
+                  commit_type: str=DEVELOPER_CHANGE) -> Commit:
+    '''
+    Stores the commit in the database
+    '''
+    session = Session.object_session(repository)
+
     branch = get_branch_name(repository)
 
-    session = Session.object_session(repository)
     commit = create(session,
                     Commit,
                     repository=repository,
@@ -150,121 +159,6 @@ def add_function_histories(repository: Repository, commit: Commit):
     information such as whether or not it was changed.
     '''
     assert False, 'implement add_function_histories'
-
-
-def create_data_from_commit(repository: Repository, commit: Commit) -> FunctionList:
-    '''
-    Given a commit, store the necessary data such as the FunctionHistory and
-    Diff instances.
-    '''
-    session = Session.object_session(repository)
-    # store which functions were altered using the diffs
-    functions = get_functions_from_repo(repository)
-    altered_functions = get_altered_functions(repository,
-                                              commit,
-                                              functions=functions)
-
-    # create FunctionHistory instances
-    for function in functions:
-        altered = True if function in altered_functions else False
-        create(session,
-               FunctionHistory,
-               function=function,
-               commit=commit,
-               altered=altered)
-
-
-def get_altered_functions(repository: Repository,
-                          commit: Commit,
-                          functions: FunctionList=[]) -> FunctionList:
-    '''
-    Given a repository and commit, return the functions that were altered.
-
-    @repository: the repository that we are retrieving the functions from
-    @commit: the commit that we are retrieving functions from
-    @functions: if we already have the functions, we can pass them in so we
-                do not have to retrieve the functions twice from source code
-    '''
-    if not functions:
-        functions = get_functions_from_repo(repository)
-
-    diffs = get_diffs(repository)
-
-    altered_functions = []
-    for diff in diffs:
-        # To find the corresponding function for the diff, we need to first
-        # limit it to the same file and then see which functions encompass that
-        # diff using line numbers.
-        matching_functions = []
-        for function in functions:
-            if (function.file_path == diff.file_path and
-                    function.first_line <= diff.line_number and
-                    function.last_line >= diff.line_number):
-                matching_functions.append(function)
-
-        if not matching_functions:
-            raise BugBuddyError('No matching function for diff: {}'.format(diff))
-
-        # there's a change that multiple functions encompass the diff if there
-        # are nested functions.  So we use the function that most tightly
-        # encompasses the diff
-        matching_function = None
-        tighest_fit = sys.maxsize
-        for function in matching_functions:
-            if ((diff.line_number - function.first_line +
-                 function.last_line - diff.line_number) < tighest_fit):
-                matching_function = function
-
-        altered_functions.append(matching_function)
-
-    altered_functions
-
-
-def get_diffs(repository: Repository) -> DiffList:
-    '''
-    Returns a list of diffs from a repository
-    '''
-    commits = Repo(repository.path).iter_commits()
-    current_commit, previous_commit = list(commits)[0:2]
-
-    diff_data = current_commit.diff(previous_commit)
-    diffs = []
-
-    for diff_item in diff_data.iter_change_type('M'):
-        file_before = diff_item.b_blob.data_stream.read().decode('utf-8').split('\n')
-        file_after = diff_item.a_blob.data_stream.read().decode('utf-8').split('\n')
-
-        fromfile = '{} @ {}'.format(diff_item.a_blob.path, current_commit.hexsha)
-        tofile = '{} @ {}'.format(diff_item.b_blob.path, current_commit.hexsha)
-        diff = difflib.unified_diff(file_before,
-                                    file_after,
-                                    fromfile=fromfile,
-                                    tofile=tofile,
-                                    lineterm='',
-                                    n=0)
-        lines = list(diff)
-        for i in range(len(lines)):
-            if lines[i].startswith('@@'):
-                # the diff follows the pattern.
-                #   '@@ previous_lineno, duration of addition, updated lineno'
-                #   '@@ -1381,0 +1382 @@'
-                #   '@@ -151,0 +152 @@'
-                # For more information:
-                #   https://www.wikiwand.com/en/Diff#/Unified_format
-                range_information = lines[i]
-                line_number = re.search('\+\d+', range_information).group()
-                line_number = int(line_number[1:])
-
-                added_content = lines[i + 1]
-
-                diff = Diff(added_content,
-                            line_number,
-                            diff_item.a_path,
-                            DIFF_ADDITION)
-
-                diffs.append(diff)
-
-    return diffs
 
 
 def revert_commit(repository: Repository, commit: Commit):
@@ -307,17 +201,32 @@ def get_repository_url_from_path(path: str):
     return Repo(path).remotes.origin.url
 
 
-def get_most_recent_commit(repository, branch='bug_buddy') -> Commit:
+def get_most_recent_commit(repository: Repository,
+                           branch='bug_buddy',
+                           create=False) -> Commit:
     '''
     Returns the latest commit from the specified branch.  Defaults to the latest
     in master
     '''
+    set_bug_buddy_branch(repository)
+
     session = Session.object_session(repository)
     command = 'git log {branch} --format="%H" | head -1'.format(branch=branch)
 
     commit_id, stderr = run_cmd(repository, command)
 
     commit = get(session, Commit, commit_id=commit_id)
+
+    if not commit and not create:
+        msg = ('Requested the most recent commit, but commit {} is not in the '
+               'database and create is set to False'.format(commit_id))
+        raise BugBuddyError(msg)
+
+    # if the most recent commit does not already exist in the database and
+    # create is set to True, store the commit
+    if not commit and create:
+        commit = _store_commit(repository, commit_id)
+
     return commit
 
 
@@ -393,3 +302,57 @@ def delete_bug_buddy_branch(repository):
     # delete the branch locally
     command = 'git branch -D bug_buddy'
     stdout, stderr = run_cmd(repository, command)
+
+
+def get_diffs(repository: Repository, commit: Commit=None) -> DiffList:
+    '''
+    Returns a list of diffs from a repository
+    '''
+    # TODO - if commit is specified, use that commit.  Otherwise just use the
+    # two latest commits in the repository
+    commits = Repo(repository.path).iter_commits()
+    current_commit, previous_commit = list(commits)[0:2]
+
+    diff_data = current_commit.diff(previous_commit)
+    diffs = []
+
+    for diff_item in diff_data.iter_change_type('M'):
+        file_before = diff_item.b_blob.data_stream.read().decode('utf-8').split('\n')
+        file_after = diff_item.a_blob.data_stream.read().decode('utf-8').split('\n')
+
+        fromfile = '{} @ {}'.format(diff_item.a_blob.path, current_commit.hexsha)
+        tofile = '{} @ {}'.format(diff_item.b_blob.path, current_commit.hexsha)
+        diff = difflib.unified_diff(file_before,
+                                    file_after,
+                                    fromfile=fromfile,
+                                    tofile=tofile,
+                                    lineterm='',
+                                    n=0)
+        lines = list(diff)
+        for i in range(len(lines)):
+            if lines[i].startswith('@@'):
+                # the diff follows the pattern.
+                #   '@@ previous_lineno, duration of addition, updated lineno'
+                #   '@@ -1381,0 +1382 @@'
+                #   '@@ -151,0 +152 @@'
+                # For more information:
+                #   https://www.wikiwand.com/en/Diff#/Unified_format
+
+                # TODO - huge assumption that the diff is only 1 line long
+                # right now.
+                range_information = lines[i]
+                line_number = re.search('\+\d+', range_information).group()
+                line_number = int(line_number[1:])
+
+                content = lines[i + 1]
+
+                diff = Diff(commit=commit,
+                            content=content,
+                            first_line=line_number,
+                            last_line=line_number + 1,
+                            file_path=diff_item.a_path,
+                            diff_type=DIFF_ADDITION)
+
+                diffs.append(diff)
+
+    return diffs

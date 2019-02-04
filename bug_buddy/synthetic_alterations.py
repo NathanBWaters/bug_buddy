@@ -36,7 +36,6 @@ from bug_buddy.constants import (BENIGN_STATEMENT,
 from bug_buddy.db import session_manager, Session
 from bug_buddy.errors import UserError
 from bug_buddy.git_utils import (create_commit,
-                                 create_data_from_commit,
                                  create_reset_commit,
                                  git_push,
                                  is_repo_clean,
@@ -47,6 +46,7 @@ from bug_buddy.git_utils import (create_commit,
 from bug_buddy.runner import run_test
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, Function, TestRun, Commit, Diff
+from bug_buddy.snapshot import snapshot
 from bug_buddy.source import edit_functions
 
 
@@ -176,7 +176,7 @@ def create_synthetic_alterations(repository: Repository):
     session.add(commit)
 
     # Store the function history data and the diffs
-    create_data_from_commit(repository, commit)
+    snapshot(repository, commit)
 
     return commit
 

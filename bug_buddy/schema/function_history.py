@@ -21,7 +21,10 @@ class FunctionHistory(Base):
     __tablename__ = 'function_history'
     id = Column(Integer, primary_key=True)
 
-    # whether or not the function was altered in this commit
+    # the line number of the function at the commit
+    line_number = Column(Integer, nullable=False)
+
+    # whether or not the function was altered in the commit
     altered = Column(Boolean, nullable=False)
 
     function_id = Column(Integer, ForeignKey('function.id'))
@@ -38,12 +41,14 @@ class FunctionHistory(Base):
     def __init__(self,
                  function: Function,
                  commit: Commit,
+                 line_number: int,
                  altered: bool):
         '''
         Creates a new FunctionHistory instance.
         '''
         self.function = function
         self.commit = commit
+        self.line_number = line_number
         self.altered = altered
 
     def __repr__(self):

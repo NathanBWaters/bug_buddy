@@ -5,10 +5,11 @@ The argparse subcommands
 from bug_buddy.logger import logger
 from bug_buddy.db import create, get, delete, session_manager
 from bug_buddy.schema import Repository
-from bug_buddy.git_utils import (delete_bug_buddy_branch,
+from bug_buddy.git_utils import (get_most_recent_commit,
+                                 delete_bug_buddy_branch,
                                  get_repository_url_from_path,
                                  get_repository_name_from_url)
-from bug_buddy.source import get_functions_from_repo
+from bug_buddy.snapshot import snapshot
 from bug_buddy.synthetic_alterations import generate_synthetic_test_results
 
 
@@ -45,6 +46,11 @@ def initialize(path: str,
 
     # first check to see if the repository already exists
     with session_manager() as session:
+        repository = get(session, Repository, url=url)
+        if repository:
+            logger.info('{} has already been intialized'.format(repository))
+            exit()
+
         repository = create(
             session,
             Repository,
@@ -55,11 +61,12 @@ def initialize(path: str,
             src_directory=src_directory,
             path=path)
 
-        session.commit()
+        commit = get_most_recent_commit(repository, create=True)
 
         logger.info('Importing data from source...')
-        get_functions_from_repo(repository)
+        snapshot(repository, commit)
 
+        session.commit()
         logger.info('Your repository "{}" has been successfully created!'
                     .format(repository))
 
