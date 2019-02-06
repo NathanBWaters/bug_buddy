@@ -70,12 +70,15 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
             test_run = run_test(repository, commit)
 
             # determine which diffs caused which test failures
-            # blame(repository, test_run)
+            blame(repository, commit, test_run)
 
             # revert to beginning of the branch, and then push that commit as a
             # new commit so we non-destructively can repeat this process with a
             # 'fresh' branch.
-            create_reset_commit(repository)
+            # create_reset_commit(repository)
+
+            # we also have to create a snapshot of the reset commit
+            # snapshot(repository, commit)
 
             # push all the new commits we've created
             git_push(repository)
@@ -154,7 +157,7 @@ def create_synthetic_alterations(repository: Repository):
     set_bug_buddy_branch(repository)
 
     # make synthetic alterations to the project
-    num_edits = random.randint(1, int(len(repository.get_src_files()) / 4))
+    num_edits = random.randint(1, int(len(repository.get_src_files()) / 8))
     edit_functions(repository,
                    get_message_func=_get_assert_statement,
                    num_edits=num_edits)

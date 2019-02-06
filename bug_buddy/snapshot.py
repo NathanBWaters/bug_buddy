@@ -28,16 +28,18 @@ def snapshot(repository: Repository, commit: Commit):
         - Create new FunctionHistory for all functions that exist
         - Store the diffs with their corresponding FunctionHistory
     '''
+    logger.info('Snapshotting commit {}'.format(commit))
     session = Session.object_session(repository)
 
     # retrieves the functions
-    functions = get_functions_from_repo(repository)
+    functions = get_functions_from_repo(repository, commit)
     session.add_all(functions)
 
     # create FunctionHistory instances for each Function
     diffs = get_diffs(repository, commit)
     save_function_histories(repository, commit, functions, diffs)
 
+    # save the diffs
     save_diffs(repository, commit, diffs)
 
 

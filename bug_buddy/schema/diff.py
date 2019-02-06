@@ -8,6 +8,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from typing import List
 
+from bug_buddy.constants import DIFF_ADDITION
 from bug_buddy.schema.base import Base
 from bug_buddy.schema.commit import Commit
 
@@ -52,7 +53,8 @@ class Diff(Base):
         # TODO - huge assumption that the diff is only 1 size right now and that
         the it is an ADDITION of a change
         '''
-        return 1
+        is_positive = 1 if self.diff_type == DIFF_ADDITION else -1
+        return is_positive * 1
 
     def __repr__(self):
         '''

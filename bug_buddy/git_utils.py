@@ -4,6 +4,7 @@ Git utility methods
 import difflib
 from git import Repo
 from git.cmd import Git
+import os
 import re
 import subprocess
 from typing import List
@@ -12,6 +13,7 @@ from bug_buddy.schema.aliases import DiffList
 from bug_buddy.constants import (
     DEVELOPER_CHANGE,
     DIFF_ADDITION,
+    DIFF_SUBTRACTION,
     SYNTHETIC_RESET_CHANGE)
 from bug_buddy.db import create, Session, get
 from bug_buddy.errors import BugBuddyError
@@ -308,7 +310,6 @@ def get_diffs(repository: Repository, commit: Commit=None) -> DiffList:
     '''
     Returns a list of diffs from a repository
     '''
-    import pdb; pdb.set_trace()
     # if we have a commit, compare the commit with it's previous commit
     if commit:
         # TODO - if commit is specified, use that commit.  Otherwise just use the
@@ -326,8 +327,15 @@ def get_diffs(repository: Repository, commit: Commit=None) -> DiffList:
     diffs = []
 
     for diff_item in diff_data.iter_change_type('M'):
-        file_before = diff_item.b_blob.data_stream.read().decode('utf-8').split('\n')
-        file_after = diff_item.a_blob.data_stream.read().decode('utf-8').split('\n')
+        file_before = diff_item.a_blob.data_stream.read().decode('utf-8').split('\n')
+
+        if commit:
+            file_after = diff_item.b_blob.data_stream.read().decode('utf-8').split('\n')
+        else:
+            # read the file directly from the repository.  There must be a
+            # better way but here we are
+            with open(os.path.join(repository.path, diff_item.b_path)) as f:
+                file_after = f.read().splitlines()
 
         diff = difflib.unified_diff(file_before,
                                     file_after,
@@ -349,16 +357,22 @@ def get_diffs(repository: Repository, commit: Commit=None) -> DiffList:
                 # right now.
                 range_information = lines[i]
                 line_number = re.search('\+\d+', range_information).group()
-                line_number = int(line_number[1:])
+                line_number = int(line_number[1:]) + 1
 
                 content = lines[i + 1]
+                diff_type = (DIFF_ADDITION if content.startswith('+')
+                             else DIFF_SUBTRACTION)
+
+                # another bug
+                if 'assert' not in content:
+                    continue
 
                 diff = Diff(commit=commit,
                             content=content,
                             first_line=line_number,
                             last_line=line_number + 1,
                             file_path=diff_item.a_path,
-                            diff_type=DIFF_ADDITION)
+                            diff_type=diff_type)
 
                 diffs.append(diff)
 

@@ -11,11 +11,14 @@ from bug_buddy.schema.function_history import FunctionHistory
 from bug_buddy.schema.test_result import TestResult
 
 
-class BlameData(Base):
+class FunctionToTestLink(Base):
     '''
-    Contains data between one method and one test for a single commit.
+    Contains data between one method and one test for a single commit, therefore
+    the many-to-many relationship between functions and tests. So if there are
+    20 tests and 20 methods for a commit, there will be 400 FunctionToTestLink
+    instances created.
     '''
-    __tablename__ = 'blame_data'
+    __tablename__ = 'function_to_test_link'
     id = Column(Integer, primary_key=True)
 
     is_blamed = Column(Boolean, nullable=False, default=False)
@@ -30,16 +33,16 @@ class BlameData(Base):
                  function_history: FunctionHistory,
                  test_result: TestResult):
         '''
-        Creates a new BlameData instance.
+        Creates a new FunctionToTestLink instance.
         '''
         self.function_history = function_history
         self.test_result = test_result
 
     def __repr__(self):
         '''
-        Converts the BlameData into a string
+        Converts the FunctionToTestLink into a string
         '''
-        return ('<BlameData "{function_name}" | {test_result} | {commit} />'
+        return ('<FunctionToTestLink "{function_name}" | {test_result} | {commit} />'
                 .format(function_name=self.function.name,
                         test_result=self.test_result.test.name,
                         commit=self.function.commit.commit_id))

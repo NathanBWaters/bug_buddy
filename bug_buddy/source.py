@@ -83,7 +83,7 @@ def edit_functions(repository: Repository,
             uneditted_functions.remove(closest_function)
 
 
-def get_functions_from_repo(repository: Repository):
+def get_functions_from_repo(repository: Repository, commit: Commit=None):
     '''
     Returns the functions from the repository src files
     '''
@@ -93,12 +93,14 @@ def get_functions_from_repo(repository: Repository):
     repo_files = repository.get_src_files(filter_file_type=PYTHON_FILE_TYPE)
 
     for repo_file in repo_files:
-        functions.extend(get_functions_from_file(repository, repo_file))
+        functions.extend(get_functions_from_file(repository, repo_file, commit))
 
     return functions
 
 
-def get_functions_from_file(repository: Repository, repo_file: str):
+def get_functions_from_file(repository: Repository,
+                            repo_file: str,
+                            commit: Commit=None):
     '''
     Returns the functions from the file.  They're created in the database if
     do not already exist
@@ -117,6 +119,7 @@ def get_functions_from_file(repository: Repository, repo_file: str):
                     repository=repository,
                     node=node,
                     file_path=relative_file_path,
+                    commit=commit,
                 )
                 logger.info('Got function {}'.format(function))
 
@@ -233,8 +236,8 @@ def get_function(repository: Repository,
             # The file was altered, so we now need to know how many lines were
             # added or subtracted above the function.
             diff_impact = sum([diff.size_difference for diff in affecting_diffs])
-            logger.info('The following diffs are adding "{}" lines: {}'
-                        .format(diff_impact, diffs))
+            logger.debug('The following diffs are adding "{}" lines: {}'
+                         .format(diff_impact, diffs))
 
         for function in potential_matching_functions:
             # if the function does not have node history, then that means it
@@ -244,8 +247,8 @@ def get_function(repository: Repository,
 
             if node.lineno == function.latest_history.first_line + diff_impact:
                 function.node = node
-                logger.info('We found the corresponding Function instance: {}'
-                            .format(function))
+                logger.debug('We found the corresponding Function instance: {}'
+                             .format(function))
                 return function
 
         import pdb; pdb.set_trace()
