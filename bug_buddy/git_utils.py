@@ -306,6 +306,13 @@ def delete_bug_buddy_branch(repository):
     stdout, stderr = run_cmd(repository, command)
 
 
+def get_patches_from_diffs(repository: Repository, commit: Commit=None) -> List[str]:
+    '''
+    Returns a list of patches from a diff
+    '''
+    pass
+
+
 def get_diffs(repository: Repository, commit: Commit=None) -> DiffList:
     '''
     Returns a list of diffs from a repository
@@ -325,7 +332,8 @@ def get_diffs(repository: Repository, commit: Commit=None) -> DiffList:
         diff_data = Repo(repository.path).head.commit.diff(None, create_patch=True)
 
     diffs = []
-
+    patches = get_patches_from_diffs(repository, commit)
+    import pdb; pdb.set_trace()
     for diff_item in diff_data.iter_change_type('M'):
         file_before = diff_item.a_blob.data_stream.read().decode('utf-8').split('\n')
 
@@ -363,9 +371,9 @@ def get_diffs(repository: Repository, commit: Commit=None) -> DiffList:
                 diff_type = (DIFF_ADDITION if content.startswith('+')
                              else DIFF_SUBTRACTION)
 
-                # another bug
+                # another bug it seems
                 if 'assert' not in content:
-                    continue
+                    raise BugBuddyError('you did not have assert in the diff?')
 
                 diff = Diff(commit=commit,
                             content=content,

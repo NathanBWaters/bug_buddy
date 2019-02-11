@@ -95,6 +95,11 @@ class Function(Base):
 
         return -1
 
+    def update_given_diff(self):
+        '''
+        Given a diff, it will update it's internal structures accordingly
+        '''
+
     @property
     def last_line(self):
         '''

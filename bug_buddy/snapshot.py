@@ -12,11 +12,16 @@ from bug_buddy.errors import UserError, BugBuddyError
 from bug_buddy.git_utils import get_diffs
 from bug_buddy.logger import logger
 from bug_buddy.source import get_functions_from_repo
-from bug_buddy.schema import Commit, Function, FunctionHistory, Repository
+from bug_buddy.schema import (Commit,
+                              Function,
+                              FunctionHistory,
+                              FunctionToTestLink,
+                              Repository,
+                              TestRun)
 from bug_buddy.schema.aliases import FunctionList, DiffList
 
 
-def snapshot(repository: Repository, commit: Commit):
+def snapshot_commit(repository: Repository, commit: Commit):
     '''
     Given a repository and commit, store the necessary data such as the
     Functions, FunctionHistory, and Diff instances.
@@ -67,6 +72,23 @@ def save_function_histories(repository: Repository,
             first_line=function.first_line,
             last_line=function.last_line,
             altered=was_altered)
+
+
+def snapshot_test_results(repository: Repository,
+                          commit: Commit,
+                          test_run: TestRun):
+    '''
+    Creates the relational mapping between the source code and the test run.
+
+    It creates the FunctionToTestLink instances
+    '''
+    session = Session.object_session(repository)
+    for function_history in commit.function_histories:
+        for test_result in test_run.test_results:
+            create(session,
+                   FunctionToTestLink,
+                   function_history,
+                   test_result)
 
 
 def save_diffs(repository: Repository,

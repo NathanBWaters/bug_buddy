@@ -31,6 +31,14 @@ class Commit(Base):
     #   3) RESET - a commit that resets synthetic alteration commits
     commit_type = Column(String, nullable=False)
 
+    # For synthetic commits, we have a base commit that we break down into
+    # smaller commits to determine blame.  The parent commit is the base commit
+    # and all smaller commits the revert the diffs of the parent commit have
+    # this attribute set.
+    parent_commit_id = Column(Integer, ForeignKey('commit.id'), nullable=True)
+    parent_commit = relationship('Commit', back_populates='child_commits')
+    child_commits = relationship('Commit', back_populates='parent_commit')
+
     test_runs = relationship('TestRun',
                              back_populates='commit',
                              cascade='all, delete, delete-orphan')
@@ -51,7 +59,8 @@ class Commit(Base):
                  repository: Repository,
                  commit_id: str,
                  branch: str,
-                 commit_type: str=SYNTHETIC_CHANGE):
+                 commit_type: str=SYNTHETIC_CHANGE,
+                 parent_commit=None):  # Commit
         '''
         Creates a new TestResults instance
         '''
@@ -63,6 +72,7 @@ class Commit(Base):
         self.commit_id = commit_id
         self.branch = branch
         self.commit_type = commit_type
+        self.parent_commit = parent_commit
 
     def causes_test_failures(self):
         '''

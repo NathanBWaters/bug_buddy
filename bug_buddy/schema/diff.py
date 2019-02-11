@@ -30,11 +30,17 @@ class Diff(Base):
     file_path = Column(String, nullable=False)
     diff_type = Column(String, nullable=False)
 
+    # The patch stores the diff information in a universally accessible way.
+    # When we are reverting a diff, we can use the patch to revert in a
+    # less error-prone way
+    patch = Column(String, nullable=False)
+
     def __init__(self,
                  commit: Commit,
                  content: str,
                  first_line: str,
                  last_line: str,
+                 patch: str,
                  file_path: str,
                  diff_type: str):
         '''
@@ -44,6 +50,7 @@ class Diff(Base):
         self.content = content
         self.first_line = first_line
         self.last_line = last_line
+        self.patch = patch
         self.file_path = file_path
         self.diff_type = diff_type
 
@@ -55,6 +62,12 @@ class Diff(Base):
         '''
         is_positive = 1 if self.diff_type == DIFF_ADDITION else -1
         return is_positive * 1
+
+    def revert(self):
+        '''
+        Given a diff, it will revert the code it altered in the source code
+        '''
+        assert False, 'you need to implement revert for Diffs'
 
     def __repr__(self):
         '''

@@ -46,7 +46,7 @@ from bug_buddy.git_utils import (create_commit,
 from bug_buddy.runner import run_test
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, Function, TestRun, Commit, Diff
-from bug_buddy.snapshot import snapshot
+from bug_buddy.snapshot import snapshot_commit, snapshot_test_results
 from bug_buddy.source import edit_functions
 
 
@@ -64,10 +64,13 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
             commit = create_synthetic_alterations(repository)
 
             # Store the data of the commit in the database
-            snapshot(repository, commit)
+            snapshot_commit(repository, commit)
 
             # run all tests against the synthetic change
             test_run = run_test(repository, commit)
+
+            # store the relationship between the test results and the functions
+            snapshot_test_results(repository, commit, test_run)
 
             # determine which diffs caused which test failures
             blame(repository, commit, test_run)
