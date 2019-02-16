@@ -9,7 +9,7 @@ from sqlalchemy.orm import relationship
 from typing import List
 
 from bug_buddy.schema.base import Base
-from bug_buddy.schema.commit import Commit, Diff
+from bug_buddy.schema.commit import Commit
 
 
 class DiffCommitLink(Base):
@@ -21,14 +21,14 @@ class DiffCommitLink(Base):
     id = Column(Integer, primary_key=True)
 
     commit_id = Column(Integer, ForeignKey('commit.id'))
-    commit = relationship('Commit', back_populates='diffs')
+    commit = relationship('Commit', back_populates='diff_links')
 
     diff_id = Column(Integer, ForeignKey('diff.id'))
-    diff = relationship('Diff', back_populates='commits')
+    diff = relationship('Diff', back_populates='commit_links')
 
     def __init__(self,
                  commit: Commit,
-                 diff: Diff):
+                 diff):
         '''
         Creates a new DiffCommitLink instance.
         '''

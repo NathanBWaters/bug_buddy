@@ -120,7 +120,20 @@ class Function(Base):
         '''
         return os.path.join(self.repository.path, self.file_path)
 
-    def prepend_statement(self, statement):
+    def remove_line(self, line):
+        '''
+        Removes a particular line from the function
+        '''
+        with open(self.abs_path, 'r') as f:
+            contents = f.readlines()
+
+        content = contents.pop(line - 1)
+        logger.info('Removed line: "{}"'.format(content))
+
+        with open(self.abs_path, 'w') as f:
+            f.writelines(contents)
+
+    def prepend_statement(self, statement, offset: int=0):
         '''
         Writes a statement to the beginning of the function
         '''
@@ -140,6 +153,7 @@ class Function(Base):
 
         # scoot down one function if the first node is a comment
         first_line_in_function += 1 if _is_comment(first_node) else 0
+        first_line_in_function += offset
 
         # note that a comment after the function does not seem to have a
         # column offset, and instead returns -1.
@@ -161,6 +175,8 @@ class Function(Base):
                             file=self.file_path,
                             function_name=self.ast_node.name,
                             lineno=first_line_in_function))
+
+        return first_line_in_function
 
     def __repr__(self):
         '''

@@ -32,6 +32,12 @@ class Diff(Base):
     # less error-prone way
     patch = Column(String, nullable=False)
 
+    # the corresponding diffs created in this commit
+    commit_links = relationship(
+        'DiffCommitLink',
+        back_populates='diff',
+        cascade='all, delete, delete-orphan')
+
     def __init__(self,
                  repository: Repository,
                  first_line: str,
@@ -54,14 +60,6 @@ class Diff(Base):
         the it is an ADDITION of a change
         '''
         return 1
-
-    @property
-    def repository(self):
-        '''
-        # TODO - huge assumption that the diff is only 1 size right now and that
-        the it is an ADDITION of a change
-        '''
-        return self.repository.repository
 
     def __repr__(self):
         '''

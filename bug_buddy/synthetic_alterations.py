@@ -50,7 +50,9 @@ from bug_buddy.git_utils import (add_diff,
 from bug_buddy.runner import run_test, library_is_testable
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, Function, TestRun, Commit, Diff
-from bug_buddy.snapshot import snapshot_commit, snapshot_test_results
+from bug_buddy.snapshot import (snapshot_commit,
+                                snapshot_test_results,
+                                snapshot_initialization)
 from bug_buddy.source import create_synthetic_alterations
 
 
@@ -61,15 +63,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
     with session_manager() as session:
         session.add(repository)
 
-        # Adds a random number of edits to the repository.
-        if not repository.diffs:
-            # adds 'assert False' to each function
-            logger.info('Creating synthetic alterations')
-            create_synthetic_alterations(repository)
-
-            # creates a diff for each 'assert False'
-            logger.info('Creating diffs')
-            create_diffs(repository)
+        snapshot_initialization(repository)
 
         num_runs = 0
         for diff_set in powerset(repository.diffs):
@@ -101,44 +95,6 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
             git_push(repository)
 
             num_runs += 1
-
-
-def create_fixing_change(repository: Repository, diffs: DiffList):
-    '''
-    Creates a single fixing change.  It removes a single 'assert False' that
-    is still present from the original synthetic alteration
-    '''
-    random.shuffle(diffs)
-
-    made_fixing_alteration = False
-    for diff in diffs:
-        if ERROR_STATEMENT in diff.content:
-            logger.info('Creating fixing change by removing line {} from {}'
-                        .format(diff.line_number, diff.file))
-            # we have an error statement that we need to remove.
-            file_path = os.path.join(repository.path, diff.file)
-            with open(file_path) as f:
-                content = f.readlines()
-
-            content.pop(diff.line_number)
-
-            with open(file_path, 'w') as f:
-                f.writelines(content)
-
-            made_fixing_alteration = True
-            break
-
-    # assumes we made a fix
-    if made_fixing_alteration:
-        commit = create_commit(repository,
-                               name='synthetic_fixing_change',
-                               commit_type=SYNTHETIC_FIXING_CHANGE)
-        test_run = run_test(repository, commit)
-
-        session = Session.object_session(repository)
-        # add the commit and test run to our database
-        session.add(commit)
-        session.add(test_run)
 
 
 def powerset(diffs):

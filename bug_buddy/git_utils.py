@@ -267,10 +267,10 @@ def get_most_recent_commit(repository: Repository,
 
     commit = get(session, Commit, commit_id=commit_id)
 
-    if not commit and not create:
-        msg = ('Requested the most recent commit, but commit {} is not in the '
-               'database and create is set to False'.format(commit_id))
-        raise BugBuddyError(msg)
+    # if not commit and not create:
+    #     msg = ('Requested the most recent commit, but commit {} is not in the '
+    #            'database and create is set to False'.format(commit_id))
+    #     raise BugBuddyError(msg)
 
     # if the most recent commit does not already exist in the database and
     # create is set to True, store the commit

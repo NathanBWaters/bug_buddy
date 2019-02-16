@@ -9,9 +9,10 @@ import sys
 from bug_buddy.constants import PYTHON_FILE_TYPE
 from bug_buddy.db import create, Session, session_manager
 from bug_buddy.errors import UserError, BugBuddyError
-from bug_buddy.git_utils import get_diffs
+from bug_buddy.git_utils import create_diffs
 from bug_buddy.logger import logger
-from bug_buddy.source import get_functions_from_repo
+from bug_buddy.source import (get_functions_from_repo,
+                              create_synthetic_alterations)
 from bug_buddy.schema import (Commit,
                               Function,
                               FunctionHistory,
@@ -41,11 +42,30 @@ def snapshot_commit(repository: Repository, commit: Commit):
     session.add_all(functions)
 
     # create FunctionHistory instances for each Function
-    diffs = get_diffs(repository, commit)
+    diffs = create_diffs(repository, commit)
     save_function_histories(repository, commit, functions, diffs)
 
     # save the diffs
     save_diffs(repository, commit, diffs)
+
+
+def snapshot_initialization(repository: Repository):
+    '''
+    Initializes the repository
+    '''
+    # Adds a random number of edits to the repository.
+    if not repository.diffs:
+        # import pdb; pdb.set_trace()
+        # adds 'assert False' to each function
+        logger.info('Creating synthetic alterations')
+        create_synthetic_alterations(repository)
+
+        # creates a diff for each 'assert False'
+        logger.info('Creating diffs')
+        create_diffs(repository)
+
+    else:
+        logger.info('Already initialized')
 
 
 def save_function_histories(repository: Repository,

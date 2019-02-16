@@ -10,7 +10,7 @@ import sys
 from bug_buddy.constants import PYTHON_FILE_TYPE
 from bug_buddy.db import Session, get_all, create
 from bug_buddy.errors import UserError, BugBuddyError
-from bug_buddy.git_utils import get_diffs
+from bug_buddy.git_utils import create_diffs
 from bug_buddy.logger import logger
 from bug_buddy.runner import library_is_testable
 from bug_buddy.schema import Commit, Function, FunctionHistory, Repository
@@ -24,14 +24,18 @@ class RewriteFunctions(ast.NodeTransformer):
     def __init__(self,
                  repository: Repository,
                  file_path: str,
+                 module,
                  prepend_assert_false=True):
         '''
         Creates a RewriteFunctions Ast Transformer
         '''
         self.repository = repository
         self.prepend_assert_false = prepend_assert_false
+        self.file_path = file_path
+        self.module = module
+        self.num_edits = 0
 
-    def visit_Functions(self, node):
+    def visit_FunctionDef(self, node):
         '''
         Is called when the transformer hits a function node
         '''
@@ -54,18 +58,17 @@ class RewriteFunctions(ast.NodeTransformer):
 
         logger.info('There is a new function: {}'.format(function))
 
-        function.prepend_statement('assert False')
+        added_line = function.prepend_statement('assert False',
+                                                offset=self.num_edits)
 
         if not library_is_testable(self.repository):
-            msg = ('You need to revert the previous Function change: {}'
-                   .format(function))
-            assert False, msg
+            # import pdb; pdb.set_trace()
+            function.remove_line(added_line)
 
-        # return ast.copy_location(ast.Subscript(
-        #     value=ast.Name(id='data', ctx=ast.Load()),
-        #     slice=ast.Index(value=ast.Str(s=node.id)),
-        #     ctx=node.ctx
-        # ), node)
+        else:
+            self.num_edits += 1
+
+        return node
 
 
 def create_synthetic_alterations(repository: Repository):
@@ -81,9 +84,11 @@ def create_synthetic_alterations(repository: Repository):
 
     for file_path in repo_files:
         file_module = get_module_from_file(file_path)
-        RewriteFunctions(repository=repository,
-                         file_path=file_path,
-                         prepend_assert_false=True).visit(file_module)
+        transformer = RewriteFunctions(repository=repository,
+                                       file_path=file_path,
+                                       prepend_assert_false=True,
+                                       module=file_module)
+        transformer.visit(file_module)
 
 
 def edit_functions(repository: Repository,
@@ -159,7 +164,7 @@ def get_functions_from_repo(repository: Repository, commit: Commit=None):
     '''
     functions = []
 
-    diffs = get_diffs(repository, commit)
+    diffs = create_diffs(repository, commit)
 
     # collect all the files
     repo_files = repository.get_src_files(filter_file_type=PYTHON_FILE_TYPE)
@@ -254,7 +259,7 @@ def get_function(repository: Repository,
     # that we have the correct matching function by comparing the line numbers
     if potential_matching_functions:
         if not diffs:
-            diffs = get_diffs(repository, commit)
+            diffs = create_diffs(repository, commit)
 
         # We have at least one matching function, now we make sure it's the
         # exact corresponding function but making sure the lines are the same.

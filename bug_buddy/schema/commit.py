@@ -54,8 +54,8 @@ class Commit(Base):
         cascade='all, delete, delete-orphan')
 
     # the corresponding diffs created in this commit
-    diffs = relationship(
-        'Diff',
+    diff_links = relationship(
+        'DiffCommitLink',
         back_populates='commit',
         cascade='all, delete, delete-orphan')
 
