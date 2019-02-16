@@ -184,9 +184,23 @@ def revert_unstaged_changes(repository: Repository):
     Git(repository.path).checkout('.')
 
 
+def add_diff(diff: Diff):
+    '''
+    Adds the diff's contents to the source code
+    '''
+    _apply_diff(diff, revert=False)
+
+
 def revert_diff(diff: Diff):
     '''
     Reverts the diff from the source
+    '''
+    _apply_diff(diff, revert=True)
+
+
+def _apply_diff(diff: Diff, revert=False):
+    '''
+    Either reverts or applies a diff
     '''
     try:
         file_name = 'bugbuddy_diff_id_{}'.format(diff.id)
@@ -199,13 +213,18 @@ def revert_diff(diff: Diff):
         temp_output.seek(0)
         temp_output.read()
 
-        command = 'git apply -R {file_path}'.format(file_path=temp_output.name)
+        command = ('git apply {revert}{file_path}'
+                   .format(revert='-R ' if revert else '',
+                           file_path=temp_output.name))
 
         stdout, stderr = run_cmd(diff.repository, command)
         if stderr:
-            msg = ('Error trying to revert diff {diff} with patch:\n{patch}\n\n'
+            msg = ('Error trying to {revert_or_add} diff {diff} with patch:\n{patch}\n\n'
                    'stderr: {stderr}'
-                   .format(diff=diff, patch=diff.patch, stderr=stderr))
+                   .format(revert_or_add='revert' if revert else 'add',
+                           diff=diff,
+                           patch=diff.patch,
+                           stderr=stderr))
             raise BugBuddyError(msg)
     finally:
         temp_output.close()
@@ -284,7 +303,7 @@ def get_commits_only_in_branch(repository, branch='origin/bug_buddy') -> List[st
     return stdout.split('\n')
 
 
-def create_reset_commit(repository: Repository):
+def reset_branch(repository: Repository):
     '''
     Creates a new commit which contains the same content as a fresh branch
     without any of it's previous edits.
@@ -305,6 +324,12 @@ def create_reset_commit(repository: Repository):
                .format(bug_buddy_commits=bug_buddy_commits))
     run_cmd(repository, command)
 
+
+def create_reset_commit(repository: Repository):
+    '''
+    Resets the branch, and then creates a commit out of that change
+    '''
+    reset_branch(repository)
     # it's possible that nothing has been changed after the git revert.
     # For example, if the initial synthetic commit only added 'assert False'
     # and then they were all undone. If so, then trying to create a commit
@@ -381,7 +406,7 @@ def get_patches_from_diffs(repository: Repository,
     return patches
 
 
-def get_diffs(repository: Repository, commit: Commit=None) -> DiffList:
+def create_diffs(repository: Repository, commit: Commit=None) -> DiffList:
     '''
     Returns a list of diffs from a repository
     '''
@@ -404,7 +429,7 @@ def get_diffs(repository: Repository, commit: Commit=None) -> DiffList:
 
         diff = get_or_create_diff(
             session=session,
-            commit=commit,
+            repository=repository,
             first_line=first_line,
             last_line=first_line + 1,
             file_path=patch.header.new_path,

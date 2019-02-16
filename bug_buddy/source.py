@@ -12,8 +12,78 @@ from bug_buddy.db import Session, get_all, create
 from bug_buddy.errors import UserError, BugBuddyError
 from bug_buddy.git_utils import get_diffs
 from bug_buddy.logger import logger
+from bug_buddy.runner import library_is_testable
 from bug_buddy.schema import Commit, Function, FunctionHistory, Repository
 from bug_buddy.schema.aliases import FunctionList, DiffList
+
+
+class RewriteFunctions(ast.NodeTransformer):
+    '''
+    Used for transforming a repository
+    '''
+    def __init__(self,
+                 repository: Repository,
+                 file_path: str,
+                 prepend_assert_false=True):
+        '''
+        Creates a RewriteFunctions Ast Transformer
+        '''
+        self.repository = repository
+        self.prepend_assert_false = prepend_assert_false
+
+    def visit_Functions(self, node):
+        '''
+        Is called when the transformer hits a function node
+        '''
+        if self.prepend_assert_false:
+            self._prepend_assert_false(node)
+
+    def _prepend_assert_false(self, node):
+        '''
+        Adds an 'assert False' to the node
+        '''
+        session = Session.object_session(self.repository)
+        # There are no perfectly matching fucntions so we therefore will return
+        # a new Function instance. We do not store the function at this point
+        function = create(
+            session,
+            Function,
+            repository=self.repository,
+            node=node,
+            file_path=self.file_path)
+
+        logger.info('There is a new function: {}'.format(function))
+
+        function.prepend_statement('assert False')
+
+        if not library_is_testable(self.repository):
+            msg = ('You need to revert the previous Function change: {}'
+                   .format(function))
+            assert False, msg
+
+        # return ast.copy_location(ast.Subscript(
+        #     value=ast.Name(id='data', ctx=ast.Load()),
+        #     slice=ast.Index(value=ast.Str(s=node.id)),
+        #     ctx=node.ctx
+        # ), node)
+
+
+def create_synthetic_alterations(repository: Repository):
+    '''
+    Creates synthetic changes to a code base, creates a commit, and then runs
+    the tests to see how the changes impacted the test results.  These changes
+    are either 'assert False' or 'assert True'.
+
+    @param repository: the code base we are changing
+    @param commit: the empty commit we're adding changes to
+    '''
+    repo_files = repository.get_src_files(filter_file_type=PYTHON_FILE_TYPE)
+
+    for file_path in repo_files:
+        file_module = get_module_from_file(file_path)
+        RewriteFunctions(repository=repository,
+                         file_path=file_path,
+                         prepend_assert_false=True).visit(file_module)
 
 
 def edit_functions(repository: Repository,
@@ -101,6 +171,16 @@ def get_functions_from_repo(repository: Repository, commit: Commit=None):
     return functions
 
 
+def get_module_from_file(repo_file: str):
+    '''
+    Return the module from the file:
+    '''
+    with open(repo_file) as file:
+        repo_file_content = file.read()
+        repo_module = ast.parse(repo_file_content)
+        return repo_module
+
+
 def get_functions_from_file(repository: Repository,
                             repo_file: str,
                             diffs: DiffList,
@@ -111,24 +191,22 @@ def get_functions_from_file(repository: Repository,
     '''
     functions = []
 
-    with open(repo_file) as file:
-        repo_file_content = file.read()
-        repo_module = ast.parse(repo_file_content)
-        for node in ast.walk(repo_module):
-            if isinstance(node, ast.FunctionDef):
-                relative_file_path = os.path.relpath(repo_file, repository.path)
-                logger.info('Currently have node "{}" at path "{}@{}"'
-                            .format(node.name, relative_file_path, node.lineno))
-                function = get_function(
-                    repository=repository,
-                    node=node,
-                    file_path=relative_file_path,
-                    diffs=diffs,
-                    commit=commit,
-                )
-                logger.info('Got function {}'.format(function))
+    repo_module = get_module_from_file(repo_file)
+    for node in ast.walk(repo_module):
+        if isinstance(node, ast.FunctionDef):
+            relative_file_path = os.path.relpath(repo_file, repository.path)
+            logger.info('Currently have node "{}" at path "{}@{}"'
+                        .format(node.name, relative_file_path, node.lineno))
+            function = get_function(
+                repository=repository,
+                node=node,
+                file_path=relative_file_path,
+                diffs=diffs,
+                commit=commit,
+            )
+            logger.info('Got function {}'.format(function))
 
-                functions.append(function)
+            functions.append(function)
 
     return functions
 

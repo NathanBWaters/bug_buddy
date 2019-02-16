@@ -9,7 +9,7 @@ from sqlalchemy.orm import relationship
 from typing import List
 
 from bug_buddy.schema.base import Base
-from bug_buddy.schema.commit import Commit
+from bug_buddy.schema.repository import Repository
 
 
 class Diff(Base):
@@ -20,8 +20,8 @@ class Diff(Base):
 
     id = Column(Integer, primary_key=True)
 
-    commit_id = Column(Integer, ForeignKey('commit.id'))
-    commit = relationship('Commit', back_populates='diffs')
+    repository_id = Column(Integer, ForeignKey('repository.id'))
+    repository = relationship('Repository', back_populates='diffs')
 
     first_line = Column(Integer, nullable=False)
     last_line = Column(Integer, nullable=False)
@@ -33,7 +33,7 @@ class Diff(Base):
     patch = Column(String, nullable=False)
 
     def __init__(self,
-                 commit: Commit,
+                 repository: Repository,
                  first_line: str,
                  last_line: str,
                  patch: str,
@@ -41,7 +41,7 @@ class Diff(Base):
         '''
         Creates a new Diff instance.
         '''
-        self.commit = commit
+        self.repository = repository
         self.first_line = first_line
         self.last_line = last_line
         self.patch = patch
@@ -61,7 +61,7 @@ class Diff(Base):
         # TODO - huge assumption that the diff is only 1 size right now and that
         the it is an ADDITION of a change
         '''
-        return self.commit.repository
+        return self.repository.repository
 
     def __repr__(self):
         '''

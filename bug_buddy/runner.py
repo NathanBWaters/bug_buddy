@@ -8,6 +8,7 @@ import time
 
 from bug_buddy.collection import create_results_from_junit_xml
 from bug_buddy.db import session_manager, create, Session
+from bug_buddy.git_utils import run_cmd
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, TestRun, Commit
@@ -68,3 +69,18 @@ def run_test(repository: Repository, commit: Commit):
         temp_output.close()
 
     return test_run
+
+
+def library_is_testable(repository):
+    '''
+    Returns whether or not the library is testable.  It does this by running
+    pytest --collect-only.  If there's anything in the stderr than we are
+    assuming we have altered a method that is called during import of the
+    library.  This is a huge limitation of bug_buddy.
+    '''
+    command = 'pytest --collect-only'
+    stdout, stderr = run_cmd(repository, command)
+    if stderr:
+        return False
+
+    return True

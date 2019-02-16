@@ -49,7 +49,7 @@ def blame(repository: Repository,
 
         # revert each part of the diff in the set
         for diff in errored_diff_set:
-            diff.revert()
+            revert_diff(diff)
 
         # create a new commit
         diff_commit = create_commit(
@@ -65,17 +65,3 @@ def blame(repository: Repository,
         # get a list of failing tests.
         failing_tests = [test for test in test_run.test_results
                          if test.status == FAILURE]
-
-
-def powerset(diffs):
-    '''
-    Returns the powerset of the diffs except the empty set
-
-    "powerset([1,2,3]) --> (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
-
-    @param: list of diffs
-    @returns: powerset of the diffs
-    '''
-    return (itertools.chain.from_iterable(
-        itertools.combinations(diffs, index) for index in range(len(diffs) + 1)
-    ))

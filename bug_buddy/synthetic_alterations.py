@@ -20,6 +20,7 @@ know which line is really at fault for a failing test.
 import ast
 import inspect
 import importlib
+import itertools
 import os
 import random
 import re
@@ -35,35 +36,56 @@ from bug_buddy.constants import (BENIGN_STATEMENT,
                                  SYNTHETIC_FIXING_CHANGE)
 from bug_buddy.db import session_manager, Session
 from bug_buddy.errors import UserError
-from bug_buddy.git_utils import (create_commit,
+from bug_buddy.git_utils import (add_diff,
+                                 create_commit,
                                  create_reset_commit,
+                                 create_diffs,
                                  git_push,
                                  is_repo_clean,
                                  revert_unstaged_changes,
                                  run_cmd,
                                  set_bug_buddy_branch,
+                                 reset_branch,
                                  update_commit)
-from bug_buddy.runner import run_test
+from bug_buddy.runner import run_test, library_is_testable
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, Function, TestRun, Commit, Diff
 from bug_buddy.snapshot import snapshot_commit, snapshot_test_results
-from bug_buddy.source import edit_functions
+from bug_buddy.source import create_synthetic_alterations
 
 
 def generate_synthetic_test_results(repository: Repository, run_limit: int):
     '''
     Creates multiple synthetic changes and test results
     '''
-    num_runs = 0
-    while run_limit is None or num_runs <= run_limit:
-        with session_manager() as session:
-            session.add(repository)
-            logger.info('Creating TestRun #{}'.format(num_runs))
+    with session_manager() as session:
+        session.add(repository)
 
-            # Adds a random number of edits to the repository.
-            commit = create_synthetic_alterations(repository)
+        # Adds a random number of edits to the repository.
+        if not repository.diffs:
+            # adds 'assert False' to each function
+            logger.info('Creating synthetic alterations')
+            create_synthetic_alterations(repository)
 
-            # Store the data of the commit in the database
+            # creates a diff for each 'assert False'
+            logger.info('Creating diffs')
+            create_diffs(repository)
+
+        num_runs = 0
+        for diff_set in powerset(repository.diffs):
+            logger.info('On DiffSet #{} with: {}'.format(num_runs, diff_set))
+
+            # revert back to a clean repository
+            reset_branch(repository)
+
+            # apply diffs
+            for diff in diff_set:
+                add_diff(diff)
+
+            commit = create_commit(repository)
+
+            # Store the data of the commit in the database.  Create the
+            # DiffCommitLink instances
             snapshot_commit(repository, commit)
 
             # run all tests against the synthetic change
@@ -73,15 +95,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
             snapshot_test_results(repository, commit, test_run)
 
             # determine which diffs caused which test failures
-            blame(repository, commit, test_run)
-
-            # revert to beginning of the branch, and then push that commit as a
-            # new commit so we non-destructively can repeat this process with a
-            # 'fresh' branch.
-            # create_reset_commit(repository)
-
-            # we also have to create a snapshot of the reset commit
-            # snapshot(repository, commit)
+            # blame(repository, commit, test_run)
 
             # push all the new commits we've created
             git_push(repository)
@@ -127,64 +141,18 @@ def create_fixing_change(repository: Repository, diffs: DiffList):
         session.add(test_run)
 
 
-def library_is_testable(repository):
+def powerset(diffs):
     '''
-    Returns whether or not the library is testable.  It does this by running
-    pytest --collect-only.  If there's anything in the stderr than we are
-    assuming we have altered a method that is called during import of the
-    library.  This is a huge limitation of bug_buddy.
+    Returns the powerset of the diffs except the empty set
+
+    "powerset([1,2,3]) --> (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
+
+    @param: list of diffs
+    @returns: powerset of the diffs
     '''
-    command = 'pytest --collect-only'
-    stdout, stderr = run_cmd(repository, command)
-    if stderr:
-        return False
-
-    return True
-
-
-def create_synthetic_alterations(repository: Repository):
-    '''
-    Creates synthetic changes to a code base, creates a commit, and then runs
-    the tests to see how the changes impacted the test results.  These changes
-    are either 'assert False' or 'assert True'.
-
-    @param repository: the code base we are changing
-    @param commit: the empty commit we're adding changes to
-    '''
-    if not is_repo_clean(repository):
-        msg = ('You attempted to work on an unclean repository.  Please run: \n'
-               '"git checkout ." to clean the library')
-        raise UserError(msg)
-
-    # make sure we are on the bug buddy branch
-    set_bug_buddy_branch(repository)
-
-    # make synthetic alterations to the project
-    num_edits = random.randint(1, int(len(repository.get_src_files()) / 8))
-    edit_functions(repository,
-                   get_message_func=_get_assert_statement,
-                   num_edits=num_edits)
-
-    # TODO: we want to make sure we can still import the library after we have
-    # done the edits.  We definitely need a better way to do this.  This is
-    # caused when simply importing the library hits a malign edit
-    while(not library_is_testable(repository)):
-        logger.info('Unable to test against the library with current edits. '
-                    'Trying again.')
-        revert_unstaged_changes(repository)
-        edit_functions(repository,
-                       get_message_func=_get_assert_statement,
-                       num_edits=num_edits)
-
-    # Create a commit from the edits
-    commit = create_commit(repository,
-                           name='synthetic_alteration_change',
-                           commit_type=SYNTHETIC_CHANGE)
-
-    session = Session.object_session(repository)
-    session.add(commit)
-
-    return commit
+    return (itertools.chain.from_iterable(
+        itertools.combinations(diffs, index) for index in range(len(diffs) + 1)
+    ))
 
 
 def _get_assert_statement(repo_function):
