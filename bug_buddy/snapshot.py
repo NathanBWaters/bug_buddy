@@ -14,6 +14,7 @@ from bug_buddy.logger import logger
 from bug_buddy.source import (get_functions_from_repo,
                               create_synthetic_alterations)
 from bug_buddy.schema import (Commit,
+                              DiffCommitLink,
                               Function,
                               FunctionHistory,
                               FunctionToTestLink,
@@ -55,17 +56,23 @@ def snapshot_initialization(repository: Repository):
     '''
     # Adds a random number of edits to the repository.
     if not repository.diffs:
-        # import pdb; pdb.set_trace()
         # adds 'assert False' to each function
         logger.info('Creating synthetic alterations')
         create_synthetic_alterations(repository)
-
-        # creates a diff for each 'assert False'
-        logger.info('Creating diffs')
-        create_diffs(repository)
-
     else:
         logger.info('Already initialized')
+
+
+def snapshot_diff_commit_link(commit: Commit, diff_set: DiffList):
+    '''
+    Creates the mapping between the commits and the diff_set
+    '''
+    session = Session.object_session(commit)
+    for diff in diff_set:
+        create(session,
+               DiffCommitLink,
+               commit=commit,
+               diff=diff)
 
 
 def save_function_histories(repository: Repository,
@@ -92,23 +99,6 @@ def save_function_histories(repository: Repository,
             first_line=function.first_line,
             last_line=function.last_line,
             altered=was_altered)
-
-
-def snapshot_test_results(repository: Repository,
-                          commit: Commit,
-                          test_run: TestRun):
-    '''
-    Creates the relational mapping between the source code and the test run.
-
-    It creates the FunctionToTestLink instances
-    '''
-    session = Session.object_session(repository)
-    for function_history in commit.function_histories:
-        for test_result in test_run.test_results:
-            create(session,
-                   FunctionToTestLink,
-                   function_history,
-                   test_result)
 
 
 def save_diffs(repository: Repository,

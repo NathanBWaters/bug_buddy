@@ -51,7 +51,7 @@ from bug_buddy.runner import run_test, library_is_testable
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, Function, TestRun, Commit, Diff
 from bug_buddy.snapshot import (snapshot_commit,
-                                snapshot_test_results,
+                                snapshot_diff_commit_link,
                                 snapshot_initialization)
 from bug_buddy.source import create_synthetic_alterations
 
@@ -76,17 +76,14 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
             for diff in diff_set:
                 add_diff(diff)
 
-            commit = create_commit(repository)
+            # create a commit.  Only allow an empty commit if there nothing
+            # in the diff
+            commit = create_commit(repository, allow_empty=not diff_set)
 
-            # Store the data of the commit in the database.  Create the
-            # DiffCommitLink instances
-            snapshot_commit(repository, commit)
+            snapshot_diff_commit_link(commit, diff_set)
 
             # run all tests against the synthetic change
-            test_run = run_test(repository, commit)
-
-            # store the relationship between the test results and the functions
-            snapshot_test_results(repository, commit, test_run)
+            run_test(repository, commit)
 
             # determine which diffs caused which test failures
             # blame(repository, commit, test_run)
@@ -94,6 +91,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
             # push all the new commits we've created
             git_push(repository)
 
+            break
             num_runs += 1
 
 

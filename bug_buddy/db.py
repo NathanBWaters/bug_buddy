@@ -83,7 +83,7 @@ def delete(session, sql_instance):
 
 
 def get_or_create_diff(session,
-                       commit: Commit,
+                       repository: Repository,
                        first_line: int,
                        last_line: int,
                        file_path: str,
@@ -91,13 +91,13 @@ def get_or_create_diff(session,
     '''
     Returns the diff if it already exists or creates it.
     '''
-    diff = get(session, Diff, commit=commit, patch=patch, file_path=file_path)
+    diff = get(session, Diff, repository=repository, patch=patch, file_path=file_path)
 
     if not diff:
         diff = create(
             session,
             Diff,
-            commit=commit,
+            repository=repository,
             first_line=first_line,
             last_line=last_line,
             patch=patch,

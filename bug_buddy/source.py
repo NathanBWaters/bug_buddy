@@ -10,7 +10,7 @@ import sys
 from bug_buddy.constants import PYTHON_FILE_TYPE
 from bug_buddy.db import Session, get_all, create
 from bug_buddy.errors import UserError, BugBuddyError
-from bug_buddy.git_utils import create_diffs
+from bug_buddy.git_utils import create_diffs, revert_diff
 from bug_buddy.logger import logger
 from bug_buddy.runner import library_is_testable
 from bug_buddy.schema import Commit, Function, FunctionHistory, Repository
@@ -61,13 +61,17 @@ class RewriteFunctions(ast.NodeTransformer):
         added_line = function.prepend_statement('assert False',
                                                 offset=self.num_edits)
 
-        if not library_is_testable(self.repository):
-            # import pdb; pdb.set_trace()
-            function.remove_line(added_line)
+        if library_is_testable(self.repository):
+            # create a new diff from this one change
+            diffs = create_diffs(self.repository)
+            assert len(diffs) == 1
+            diff = diffs[0]
+            logger.info('Created diff: {}'.format(diff))
 
+            # go back to a clean repository
+            revert_diff(diff)
         else:
-            self.num_edits += 1
-
+            function.remove_line(added_line)
         return node
 
 

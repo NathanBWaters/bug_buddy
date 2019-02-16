@@ -13,7 +13,7 @@ def _train(args):
 
     @param args: the argparse arguments
     '''
-    commands.train(args.path)
+    commands.train(args.path.strip())
 
 
 def _analyze(args):
@@ -22,7 +22,7 @@ def _analyze(args):
 
     @param args: the argparse arguments
     '''
-    commands.analyze(args.path)
+    commands.analyze(args.path.strip())
 
 
 def _delete(args):
@@ -31,7 +31,7 @@ def _delete(args):
 
     @param args: the argparse arguments
     '''
-    commands.delete_repository(args.path)
+    commands.delete_repository(args.path.strip())
 
 
 def _generate(args):
@@ -40,7 +40,7 @@ def _generate(args):
 
     @param args: the argparse arguments
     '''
-    commands.generate(args.repository,
+    commands.generate(args.repository.strip(),
                       run_limit=int(args.num_runs) if args.num_runs else None)
 
 

@@ -209,9 +209,8 @@ def _apply_diff(diff: Diff, revert=False):
             prefix=file_name,
             suffix=suffix,
             dir=diff.repository.path)
-        temp_output.write(str.encode(diff.patch))
-        temp_output.seek(0)
-        temp_output.read()
+        temp_output.write(str.encode(diff.patch + '\n\n'))
+        temp_output.flush()
 
         command = ('git apply {revert}{file_path}'
                    .format(revert='-R ' if revert else '',

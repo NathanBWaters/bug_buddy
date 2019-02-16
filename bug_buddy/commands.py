@@ -46,24 +46,21 @@ def initialize(path: str,
     # first check to see if the repository already exists
     with session_manager() as session:
         repository = get(session, Repository, url=url)
-        if repository:
-            logger.info('{} has already been intialized'.format(repository))
-            exit()
-
-        repository = create(
-            session,
-            Repository,
-            name=name,
-            url=url,
-            initialize_commands=initialize_commands,
-            test_commands=test_commands,
-            src_directory=src_directory,
-            path=path)
+        if not repository:
+            repository = create(
+                session,
+                Repository,
+                name=name,
+                url=url,
+                initialize_commands=initialize_commands,
+                test_commands=test_commands,
+                src_directory=src_directory,
+                path=path)
 
         snapshot_initialization(repository)
 
         session.commit()
-        logger.info('Your repository "{}" has been successfully created!'
+        logger.info('Your repository "{}" has been successfully initialized!'
                     .format(repository))
 
 

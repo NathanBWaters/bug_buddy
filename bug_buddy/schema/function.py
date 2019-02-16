@@ -128,7 +128,8 @@ class Function(Base):
             contents = f.readlines()
 
         content = contents.pop(line - 1)
-        logger.info('Removed line: "{}"'.format(content))
+        logger.info('Removed line: "{}" from {}'
+                    .format(content.strip(), self.file_path))
 
         with open(self.abs_path, 'w') as f:
             f.writelines(contents)
