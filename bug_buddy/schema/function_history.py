@@ -34,7 +34,7 @@ class FunctionHistory(Base):
     commit_id = Column(Integer, ForeignKey('commit.id'))
     commit = relationship('Commit', back_populates='function_histories')
 
-    test_impact = relationship(
+    test_maps = relationship(
         'FunctionToTestLink',
         back_populates='function_history',
         cascade='all, delete, delete-orphan')

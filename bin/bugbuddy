@@ -40,7 +40,8 @@ def _generate(args):
 
     @param args: the argparse arguments
     '''
-    commands.generate(args.repository, run_limit=int(args.num_runs))
+    commands.generate(args.repository,
+                      run_limit=int(args.num_runs) if args.num_runs else None)
 
 
 def _initialize(args):

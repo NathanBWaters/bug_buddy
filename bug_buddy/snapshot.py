@@ -6,7 +6,7 @@ import random
 from typing import List
 import sys
 
-from bug_buddy.constants import PYTHON_FILE_TYPE, DIFF_ADDITION
+from bug_buddy.constants import PYTHON_FILE_TYPE
 from bug_buddy.db import create, Session, session_manager
 from bug_buddy.errors import UserError, BugBuddyError
 from bug_buddy.git_utils import get_diffs

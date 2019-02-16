@@ -7,7 +7,7 @@ import random
 from typing import List
 import sys
 
-from bug_buddy.constants import PYTHON_FILE_TYPE, DIFF_ADDITION
+from bug_buddy.constants import PYTHON_FILE_TYPE
 from bug_buddy.db import Session, get_all, create
 from bug_buddy.errors import UserError, BugBuddyError
 from bug_buddy.git_utils import get_diffs
@@ -89,17 +89,21 @@ def get_functions_from_repo(repository: Repository, commit: Commit=None):
     '''
     functions = []
 
+    diffs = get_diffs(repository, commit)
+
     # collect all the files
     repo_files = repository.get_src_files(filter_file_type=PYTHON_FILE_TYPE)
 
     for repo_file in repo_files:
-        functions.extend(get_functions_from_file(repository, repo_file, commit))
+        functions.extend(
+            get_functions_from_file(repository, repo_file, diffs, commit))
 
     return functions
 
 
 def get_functions_from_file(repository: Repository,
                             repo_file: str,
+                            diffs: DiffList,
                             commit: Commit=None):
     '''
     Returns the functions from the file.  They're created in the database if
@@ -119,6 +123,7 @@ def get_functions_from_file(repository: Repository,
                     repository=repository,
                     node=node,
                     file_path=relative_file_path,
+                    diffs=diffs,
                     commit=commit,
                 )
                 logger.info('Got function {}'.format(function))
@@ -126,52 +131,6 @@ def get_functions_from_file(repository: Repository,
                 functions.append(function)
 
     return functions
-
-
-def get_altered_functions(repository: Repository,
-                          commit: Commit,
-                          functions: FunctionList=[]) -> FunctionList:
-    '''
-    Given a repository and commit, return the functions that were altered.
-
-    @repository: the repository that we are retrieving the functions from
-    @commit: the commit that we are retrieving functions from
-    @functions: if we already have the functions, we can pass them in so we
-                do not have to retrieve the functions twice from source code
-    '''
-    if not functions:
-        functions = get_functions_from_repo(repository)
-
-    diffs = get_diffs(repository, commit)
-
-    altered_functions = []
-    for diff in diffs:
-        # To find the corresponding function for the diff, we need to first
-        # limit it to the same file and then see which functions encompass that
-        # diff using line numbers.
-        matching_functions = []
-        for function in functions:
-            if (function.file_path == diff.file_path and
-                    function.first_line <= diff.first_line and
-                    function.last_line >= diff.last_line):
-                matching_functions.append(function)
-
-        if not matching_functions:
-            raise BugBuddyError('No matching function for diff: {}'.format(diff))
-
-        # there's a change that multiple functions encompass the diff if there
-        # are nested functions.  So we use the function that most tightly
-        # encompasses the diff
-        matching_function = None
-        tighest_fit = sys.maxsize
-        for function in matching_functions:
-            if ((diff.line_number - function.first_line +
-                 function.last_line - diff.line_number) < tighest_fit):
-                matching_function = function
-
-        altered_functions.append(matching_function)
-
-    return altered_functions
 
 
 def get_function(repository: Repository,
@@ -251,7 +210,6 @@ def get_function(repository: Repository,
                              .format(function))
                 return function
 
-        import pdb; pdb.set_trace()
         logger.info('The following potential_matching_functions did not match  '
                     'the node line number "{lineno}": {functions}'
                     .format(lineno=node.lineno,

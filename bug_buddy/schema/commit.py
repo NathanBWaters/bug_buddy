@@ -35,9 +35,13 @@ class Commit(Base):
     # smaller commits to determine blame.  The parent commit is the base commit
     # and all smaller commits the revert the diffs of the parent commit have
     # this attribute set.
-    parent_commit_id = Column(Integer, ForeignKey('commit.id'), nullable=True)
-    parent_commit = relationship('Commit', back_populates='child_commits')
-    child_commits = relationship('Commit', back_populates='parent_commit')
+    # parent_commit_id = Column(Integer, ForeignKey('commit.id'), nullable=True)
+    # parent_commit = relationship(
+    #     'Commit',
+    #     remote_side=[parent_commit_id])
+    # child_commits = relationship(
+    #     'Commit',
+    #     back_populates='parent_commit')
 
     test_runs = relationship('TestRun',
                              back_populates='commit',
@@ -60,7 +64,8 @@ class Commit(Base):
                  commit_id: str,
                  branch: str,
                  commit_type: str=SYNTHETIC_CHANGE,
-                 parent_commit=None):  # Commit
+                 # parent_commit=None
+                 ):  # Commit
         '''
         Creates a new TestResults instance
         '''
@@ -72,7 +77,7 @@ class Commit(Base):
         self.commit_id = commit_id
         self.branch = branch
         self.commit_type = commit_type
-        self.parent_commit = parent_commit
+        # self.parent_commit = parent_commit
 
     def causes_test_failures(self):
         '''

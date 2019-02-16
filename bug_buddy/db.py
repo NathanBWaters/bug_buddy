@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from bug_buddy.errors import BugBuddyError
-from bug_buddy.schema import Base, Repository, Function
+from bug_buddy.schema import Base, Commit, Diff, Function, Repository
 
 
 # Create an engine that stores data in the local directory's
@@ -80,6 +80,30 @@ def delete(session, sql_instance):
     Used to get a single instance of a class that matches the kwargs parameters
     '''
     session.delete(sql_instance)
+
+
+def get_or_create_diff(session,
+                       commit: Commit,
+                       first_line: int,
+                       last_line: int,
+                       file_path: str,
+                       patch: str):
+    '''
+    Returns the diff if it already exists or creates it.
+    '''
+    diff = get(session, Diff, commit=commit, patch=patch, file_path=file_path)
+
+    if not diff:
+        diff = create(
+            session,
+            Diff,
+            commit=commit,
+            first_line=first_line,
+            last_line=last_line,
+            patch=patch,
+            file_path=file_path)
+
+    return diff
 
 
 def get_or_create_repository(name: str=None,

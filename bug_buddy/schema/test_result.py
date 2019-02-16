@@ -28,8 +28,8 @@ class TestResult(Base):
     # Whether or not the test passed or failed
     status = Column(String, nullable=False)
 
-    blame_data = relationship(
-        'BlameData',
+    function_maps = relationship(
+        'FunctionToTestLink',
         back_populates='test_result',
         cascade='all, delete, delete-orphan')
 

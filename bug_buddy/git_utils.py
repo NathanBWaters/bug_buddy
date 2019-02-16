@@ -7,18 +7,20 @@ from git.cmd import Git
 import os
 import re
 import subprocess
+import tempfile
 from typing import List
+import whatthepatch
 
 from bug_buddy.schema.aliases import DiffList
 from bug_buddy.constants import (
     DEVELOPER_CHANGE,
-    DIFF_ADDITION,
-    DIFF_SUBTRACTION,
     SYNTHETIC_RESET_CHANGE)
-from bug_buddy.db import create, Session, get
+from bug_buddy.db import create, Session, get, get_or_create_diff
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
 from bug_buddy.schema import Commit, Diff, Repository
+
+RANGE_INFO_REGEX = '@@ -?\d+,\d+ \+\d+,\d+ @@'
 
 
 def run_cmd(repository: Repository, command: str, log=False):
@@ -182,6 +184,33 @@ def revert_unstaged_changes(repository: Repository):
     Git(repository.path).checkout('.')
 
 
+def revert_diff(diff: Diff):
+    '''
+    Reverts the diff from the source
+    '''
+    try:
+        file_name = 'bugbuddy_diff_id_{}'.format(diff.id)
+        suffix = '.patch'
+        temp_output = tempfile.NamedTemporaryFile(
+            prefix=file_name,
+            suffix=suffix,
+            dir=diff.repository.path)
+        temp_output.write(str.encode(diff.patch))
+        temp_output.seek(0)
+        temp_output.read()
+
+        command = 'git apply -R {file_path}'.format(file_path=temp_output.name)
+
+        stdout, stderr = run_cmd(diff.repository, command)
+        if stderr:
+            msg = ('Error trying to revert diff {diff} with patch:\n{patch}\n\n'
+                   'stderr: {stderr}'
+                   .format(diff=diff, patch=diff.patch, stderr=stderr))
+            raise BugBuddyError(msg)
+    finally:
+        temp_output.close()
+
+
 def git_push(repository: Repository):
     '''
     Pushes the commit to the "bug_buddy" branch
@@ -306,82 +335,81 @@ def delete_bug_buddy_branch(repository):
     stdout, stderr = run_cmd(repository, command)
 
 
-def get_patches_from_diffs(repository: Repository, commit: Commit=None) -> List[str]:
+def get_patches_from_diffs(repository: Repository,
+                           commit: Commit=None,
+                           split_per_method=True) -> List[str]:
     '''
-    Returns a list of patches from a diff
+    Creates a patch file containing all the diffs in the repository and then
+    returns all those patches as a list of patches
     '''
-    pass
+    # this command will output the diff information into stdout
+    command = 'git --no-pager diff'
+    diff_data, _ = run_cmd(repository, command)
+
+    patches = diff_data.split('diff --git ')[1:]
+    if split_per_method:
+        method_granular_patches = []
+        for patch in patches:
+            if len(re.findall(RANGE_INFO_REGEX, patch)) > 1:
+                # it looks like there were multiple edits that made it into
+                # the same hunk.  We need to split each part of the patch hunk
+                # into it's own chunk.  First step is to keep the first four
+                # lines, the header, which will become the first four lines
+                # of each sub-chunk.  For example:
+                patch_lines = patch.split('\n')
+                header = patch_lines[0:4]
+
+                starting_line = 4
+                sub_patch_lines = []
+                for i in range(4, len(patch_lines)):
+                    if (re.findall(RANGE_INFO_REGEX, patch_lines[i]) or
+                            i == len(patch_lines) - 1):
+                        if sub_patch_lines:
+                            sub_patch = '\n'.join(
+                                header + patch_lines[starting_line: i])
+                            method_granular_patches.append(sub_patch)
+
+                            # start over for the next subpatch
+                            sub_patch_lines = []
+                            starting_line = i
+
+                    sub_patch_lines.append(patch_lines[i])
+
+            else:
+                method_granular_patches.append(patch)
+        patches = method_granular_patches
+    return patches
 
 
 def get_diffs(repository: Repository, commit: Commit=None) -> DiffList:
     '''
     Returns a list of diffs from a repository
     '''
-    # if we have a commit, compare the commit with it's previous commit
-    if commit:
-        # TODO - if commit is specified, use that commit.  Otherwise just use the
-        # two latest commits in the repository
-        commits = Repo(repository.path).iter_commits()
-        current_tree, previous_commit = list(commits)[0:2]
-        diff_data = current_tree.diff(previous_commit, create_patch=True)
-
-    # otherwise, we are trying to compare the local diff with the previous
-    # commit
-    else:
-        # how we can compare the latest commit to the current tree
-        diff_data = Repo(repository.path).head.commit.diff(None, create_patch=True)
+    session = Session.object_session(repository)
+    if not commit:
+        commit = get_most_recent_commit(repository)
 
     diffs = []
+
     patches = get_patches_from_diffs(repository, commit)
-    import pdb; pdb.set_trace()
-    for diff_item in diff_data.iter_change_type('M'):
-        file_before = diff_item.a_blob.data_stream.read().decode('utf-8').split('\n')
+    for patch in patches:
+        patch = list(whatthepatch.parse_patch(patch))[0]
 
-        if commit:
-            file_after = diff_item.b_blob.data_stream.read().decode('utf-8').split('\n')
-        else:
-            # read the file directly from the repository.  There must be a
-            # better way but here we are
-            with open(os.path.join(repository.path, diff_item.b_path)) as f:
-                file_after = f.read().splitlines()
+        # this only works for addition diffs
+        first_line = 0
+        for old_line_number, new_line_number, line in patch.changes:
+            if not old_line_number and new_line_number:
+                first_line = new_line_number
+                break
 
-        diff = difflib.unified_diff(file_before,
-                                    file_after,
-                                    fromfile='previous',
-                                    tofile='current',
-                                    lineterm='',
-                                    n=0)
-        lines = list(diff)
-        for i in range(len(lines)):
-            if lines[i].startswith('@@'):
-                # the diff follows the pattern.
-                #   '@@ previous_lineno, duration of addition, updated lineno'
-                #   '@@ -1381,0 +1382 @@'
-                #   '@@ -151,0 +152 @@'
-                # For more information:
-                #   https://www.wikiwand.com/en/Diff#/Unified_format
+        diff = get_or_create_diff(
+            session=session,
+            commit=commit,
+            first_line=first_line,
+            last_line=first_line + 1,
+            file_path=patch.header.new_path,
+            patch=patch.text)
 
-                # TODO - huge assumption that the diff is only 1 line long
-                # right now.
-                range_information = lines[i]
-                line_number = re.search('\+\d+', range_information).group()
-                line_number = int(line_number[1:]) + 1
-
-                content = lines[i + 1]
-                diff_type = (DIFF_ADDITION if content.startswith('+')
-                             else DIFF_SUBTRACTION)
-
-                # another bug it seems
-                if 'assert' not in content:
-                    raise BugBuddyError('you did not have assert in the diff?')
-
-                diff = Diff(commit=commit,
-                            content=content,
-                            first_line=line_number,
-                            last_line=line_number + 1,
-                            file_path=diff_item.a_path,
-                            diff_type=diff_type)
-
-                diffs.append(diff)
+        diffs.append(diff)
 
     return diffs

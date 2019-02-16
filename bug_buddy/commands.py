@@ -9,7 +9,7 @@ from bug_buddy.git_utils import (get_most_recent_commit,
                                  delete_bug_buddy_branch,
                                  get_repository_url_from_path,
                                  get_repository_name_from_url)
-from bug_buddy.snapshot import snapshot
+from bug_buddy.snapshot import snapshot_commit
 from bug_buddy.synthetic_alterations import generate_synthetic_test_results
 
 
@@ -64,7 +64,7 @@ def initialize(path: str,
         commit = get_most_recent_commit(repository, create=True)
 
         logger.info('Importing data from source...')
-        snapshot(repository, commit)
+        snapshot_commit(repository, commit)
 
         session.commit()
         logger.info('Your repository "{}" has been successfully created!'

@@ -24,10 +24,10 @@ class FunctionToTestLink(Base):
     is_blamed = Column(Boolean, nullable=False, default=False)
 
     function_history_id = Column(Integer, ForeignKey('function_history.id'))
-    function_history = relationship('FunctionHistory', back_populates='blame_data')
+    function_history = relationship('FunctionHistory', back_populates='test_maps')
 
     test_result_id = Column(Integer, ForeignKey('test_result.id'))
-    test_result = relationship('TestResult', back_populates='blame_data')
+    test_result = relationship('TestResult', back_populates='function_maps')
 
     def __init__(self,
                  function_history: FunctionHistory,
