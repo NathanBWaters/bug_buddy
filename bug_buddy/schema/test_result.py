@@ -33,6 +33,13 @@ class TestResult(Base):
         back_populates='test_result',
         cascade='all, delete, delete-orphan')
 
+    # get all the blames for this TestResult
+    blames = relationship(
+        'Blame',
+        back_populates='test_result',
+        cascade='all, delete, delete-orphan'
+    )
+
     def __init__(self, test: Test, test_run: TestRun, status: str):
         '''
         Creates a new TestResults instance

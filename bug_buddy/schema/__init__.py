@@ -3,6 +3,7 @@
 One stop shop for importing all of our models
 '''
 from . base import Base
+from . blame import Blame
 from . commit import Commit
 from . diff import Diff
 from . diff_commit_link import DiffCommitLink

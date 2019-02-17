@@ -28,7 +28,10 @@ import sys
 from typing import List
 
 from bug_buddy.schema.aliases import DiffList
-from bug_buddy.blaming import synthetic_blame
+from bug_buddy.blaming import (
+    get_matching_commit_for_diffs,
+    powerset,
+    synthetic_blame)
 from bug_buddy.constants import (BENIGN_STATEMENT,
                                  ERROR_STATEMENT,
                                  PYTHON_FILE_TYPE,
@@ -67,45 +70,49 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
 
         num_runs = 0
         for diff_set in powerset(repository.diffs):
-            logger.info('On DiffSet #{} with: {}'.format(num_runs, diff_set))
+            logger.info('On run #{} with: {}'.format(num_runs, diff_set))
 
-            # revert back to a clean repository
-            reset_branch(repository)
+            # see if we already have a commit and test run for the diff set.
+            # if we do, continue
+            commit = get_matching_commit_for_diffs(repository, diff_set)
 
-            # apply diffs
-            for diff in diff_set:
-                add_diff(diff)
+            # if the commit does not already exist for this set, then we need
+            # to create it and run tests against it
+            if not commit:
+                logger.info('Creating a new commit for diff_set: {}'
+                            .format(diff_set))
+                # revert back to a clean repository
+                reset_branch(repository)
 
-            # create a commit.  Only allow an empty commit if there nothing
-            # in the diff
-            commit = create_commit(repository, allow_empty=not diff_set)
+                # apply diffs
+                for diff in diff_set:
+                    add_diff(diff)
 
-            snapshot_diff_commit_link(commit, diff_set)
+                # create a commit.  Only allow an empty commit if there nothing
+                # in the diff
+                commit = create_commit(repository, allow_empty=not diff_set)
 
-            # run all tests against the synthetic change
-            run_test(repository, commit)
+                snapshot_diff_commit_link(commit, diff_set)
 
-            # determine which diffs caused which test failures
-            # synthetic_blame(repository, commit, test_run)
+                # push newly created commit
+                git_push(repository)
 
-            # push all the new commits we've created
-            git_push(repository)
+            if not commit.test_runs:
+                logger.info('Running the tests against commit: {}'
+                            .format(commit))
+                # run all tests against the synthetic change
+                test_run = run_test(repository, commit)
+
+            if not commit.blames:
+                pass
+                # logger.info('Setting blame for commit: {}'.format(commit))
+                # determine which diffs caused which test failures
+                # synthetic_blame(repository, commit, test_run)
+            session.commit()
+            logger.info('Completed run #{}'.format(num_runs))
 
             num_runs += 1
 
-
-def powerset(diffs):
-    '''
-    Returns the powerset of the diffs except the empty set
-
-    "powerset([1,2,3]) --> (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
-
-    @param: list of diffs
-    @returns: powerset of the diffs
-    '''
-    return (itertools.chain.from_iterable(
-        itertools.combinations(diffs, index) for index in range(len(diffs) + 1)
-    ))
 
 
 def _get_assert_statement(repo_function):

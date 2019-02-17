@@ -90,6 +90,24 @@ class Commit(Base):
 
         return False
 
+    @property
+    def diffs(self):
+        '''
+        Returns the diffs in the commit
+        '''
+        return [diff_link.diff for diff_link in self.diff_links]
+
+    @property
+    def blames(self):
+        '''
+        Returns the diffs in the commit
+        '''
+        blames = []
+        for test_result in self.test_results:
+            blames.extend(test_result.blames)
+
+        return blames
+
     def __repr__(self):
         '''
         Converts the repository into a string

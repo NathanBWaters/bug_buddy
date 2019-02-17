@@ -38,6 +38,13 @@ class Diff(Base):
         back_populates='diff',
         cascade='all, delete, delete-orphan')
 
+    # get all the times this diff has been blamed
+    blames = relationship(
+        'Blame',
+        back_populates='diff',
+        cascade='all, delete, delete-orphan'
+    )
+
     def __init__(self,
                  repository: Repository,
                  first_line: str,
