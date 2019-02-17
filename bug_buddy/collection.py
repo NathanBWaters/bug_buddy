@@ -3,7 +3,9 @@ Reads from the output file a test run
 '''
 from junitparser import JUnitXml
 
-from bug_buddy.constants import SUCCESS, FAILURE
+from bug_buddy.constants import (TEST_OUTPUT_SUCCESS,
+                                 TEST_OUTPUT_FAILURE,
+                                 TEST_OUTPUT_SKIPPED)
 from bug_buddy.db import Session, get_or_create, create, session_manager
 from bug_buddy.schema import Repository, TestResult, Test, TestRun, Commit
 
@@ -40,7 +42,13 @@ def create_results_from_junit_xml(output_file: str,
             classname=test_case._elem.attrib.get('classname'),
         )
 
-        status = FAILURE if test_case.result else SUCCESS
+        status = TEST_OUTPUT_FAILURE if test_case.result else TEST_OUTPUT_SUCCESS
+
+        # if the test is skipped, do not keep it
+        if hasattr(test_case, 'result') and hasattr(test_case.result, 'type'):
+            if test_case.result.type == 'pytest.skip':
+                status = TEST_OUTPUT_SKIPPED
+
         create(
             session,
             TestResult,

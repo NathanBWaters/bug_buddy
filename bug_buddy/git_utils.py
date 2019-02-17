@@ -27,7 +27,6 @@ def run_cmd(repository: Repository, command: str, log=False):
     '''
     Runs a shell command
     '''
-    logger.info('Running shell command: "{}"'.format(command))
     process = subprocess.Popen(
         command,
         shell=True,
@@ -116,9 +115,8 @@ def create_commit(repository: Repository,
     Git(repository.path).add('-A')
 
     Git(repository.path).commit(
-        '-m "{commit_name}" {allow_empty}'
-        .format(commit_name=commit_name,
-                allow_empty='--allow-empty' if allow_empty else ''))
+        '-m "{commit_name}"'.format(commit_name=commit_name),
+        '--allow-empty' if allow_empty else None)
 
     commit_id = get_commit_id(repository)
     return _store_commit(repository, commit_id, commit_type)

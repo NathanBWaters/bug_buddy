@@ -8,7 +8,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
 from bug_buddy.errors import BugBuddyError
-from bug_buddy.constants import FAILURE, SYNTHETIC_CHANGE
+from bug_buddy.constants import TEST_OUTPUT_FAILURE, SYNTHETIC_CHANGE
 from bug_buddy.schema.base import Base
 from bug_buddy.schema.repository import Repository
 
@@ -85,7 +85,7 @@ class Commit(Base):
         '''
         for test_run in self.test_runs:
             for test_result in test_run.test_results:
-                if test_result.status == FAILURE:
+                if test_result.status == TEST_OUTPUT_FAILURE:
                     return True
 
         return False

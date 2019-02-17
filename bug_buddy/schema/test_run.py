@@ -10,7 +10,9 @@ from sqlalchemy.orm import relationship
 import textwrap
 import time
 
-from bug_buddy.constants import SUCCESS, FAILURE
+from bug_buddy.constants import (TEST_OUTPUT_FAILURE,
+                                 TEST_OUTPUT_SKIPPED,
+                                 TEST_OUTPUT_SUCCESS)
 from bug_buddy.schema.base import Base
 from bug_buddy.schema.commit import Commit
 
@@ -56,7 +58,8 @@ class TestRun(Base):
         '''
         Returns the list of passing tests in this test run
         '''
-        return [test for test in self.test_results if test.status == SUCCESS]
+        return [test for test in self.test_results
+                if test.status == TEST_OUTPUT_SUCCESS]
 
     @property
     def num_failed_tests(self):
@@ -70,15 +73,32 @@ class TestRun(Base):
         '''
         Returns the list of failed tests in this test run
         '''
-        return [test for test in self.test_results if test.status == FAILURE]
+        return [test for test in self.test_results
+                if test.status == TEST_OUTPUT_FAILURE]
+
+    @property
+    def num_skipped_tests(self):
+        '''
+        Returns the number of skipped tests in this test run
+        '''
+        return len(self.skipped_tests)
+
+    @property
+    def skipped_tests(self):
+        '''
+        Returns the list of skipped tests in this test run
+        '''
+        return [test for test in self.test_results
+                if test.status == TEST_OUTPUT_SKIPPED]
 
     def __repr__(self):
         '''
         Converts the repository into a string
         '''
         return ('<TestRun {id} | {commit_id} | Passed: {passed} | '
-                'Failed: {failed} />'
+                'Failed: {failed} | Skipped: {skipped} />'
                 .format(id=self.id,
                         commit_id=self.commit_id,
                         passed=self.num_passed_tests,
-                        failed=self.num_failed_tests))
+                        failed=self.num_failed_tests,
+                        skipped=self.num_skipped_tests))

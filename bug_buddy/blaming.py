@@ -5,7 +5,6 @@ import itertools
 from junitparser import JUnitXml
 
 from bug_buddy.constants import (ERROR_STATEMENT,
-                                 FAILURE,
                                  SYNTHETIC_FIXING_CHANGE)
 from bug_buddy.db import Session, get_or_create, create, session_manager
 from bug_buddy.git_utils import create_commit
@@ -21,3 +20,4 @@ def synthetic_blame(repository: Repository,
     Given a synthetic commit, it will create blames for the commit based on
     the blames of the sub-combinations of the diffs
     '''
+    pass

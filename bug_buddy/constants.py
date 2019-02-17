@@ -8,8 +8,9 @@ FILE_TYPES = {
     PYTHON_FILE_TYPE: '.py'
 }
 
-SUCCESS = 'success'
-FAILURE = 'failure'
+TEST_OUTPUT_SUCCESS = 'success'
+TEST_OUTPUT_FAILURE = 'failure'
+TEST_OUTPUT_SKIPPED = 'skipped'
 
 ########################################################
 #                 Synthetic Statements                 #

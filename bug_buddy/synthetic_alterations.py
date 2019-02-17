@@ -28,7 +28,7 @@ import sys
 from typing import List
 
 from bug_buddy.schema.aliases import DiffList
-from bug_buddy.blaming import blame
+from bug_buddy.blaming import synthetic_blame
 from bug_buddy.constants import (BENIGN_STATEMENT,
                                  ERROR_STATEMENT,
                                  PYTHON_FILE_TYPE,
@@ -86,12 +86,11 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
             run_test(repository, commit)
 
             # determine which diffs caused which test failures
-            # blame(repository, commit, test_run)
+            # synthetic_blame(repository, commit, test_run)
 
             # push all the new commits we've created
             git_push(repository)
 
-            break
             num_runs += 1
 
 
