@@ -54,5 +54,6 @@ def create_results_from_junit_xml(output_file: str,
             TestResult,
             test=test,
             test_run=test_run,
-            status=status
+            status=status,
+            time=test_case.time,
         )

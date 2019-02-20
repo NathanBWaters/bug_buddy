@@ -8,7 +8,7 @@ from typing import List
 import sys
 
 from bug_buddy.constants import PYTHON_FILE_TYPE
-from bug_buddy.db import Session, get_all, create
+from bug_buddy.db import Session, get_all, create, delete
 from bug_buddy.errors import UserError, BugBuddyError
 from bug_buddy.git_utils import create_diffs, revert_diff
 from bug_buddy.logger import logger
@@ -68,9 +68,14 @@ class RewriteFunctions(ast.NodeTransformer):
             diff = diffs[0]
             logger.info('Created diff: {}'.format(diff))
 
+            # this is the function's synthetic diff
+            function.synthetic_diff = diff
+
             # go back to a clean repository
             revert_diff(diff)
+
         else:
+            # remove the addition from the source code
             function.remove_line(added_line)
         return node
 

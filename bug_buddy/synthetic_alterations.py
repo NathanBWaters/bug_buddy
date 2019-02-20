@@ -114,7 +114,6 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
             num_runs += 1
 
 
-
 def _get_assert_statement(repo_function):
     '''
     Adds either a assert True or assert False right after the beginning to a

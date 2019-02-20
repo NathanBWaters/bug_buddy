@@ -6,6 +6,7 @@ from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
+from bug_buddy.constants import TEST_OUTPUT_FAILURE
 from bug_buddy.schema.base import Base
 from bug_buddy.schema.repository import Repository
 
@@ -25,8 +26,6 @@ class Test(Base):
 
     test_results = relationship('TestResult', back_populates='test')
 
-    # the relationship between this test and each routine in the code base
-
     def __init__(self,
                  repository: Repository,
                  name: str,
@@ -39,6 +38,14 @@ class Test(Base):
         self.file = file
         self.repository = repository
         self.classname = classname
+
+    @property
+    def failing_instances(self):
+        '''
+        Returns the list of TestResults where the test failed
+        '''
+        return [test_result for test_result in self.test_results
+                if test_result.status == TEST_OUTPUT_FAILURE]
 
     def __repr__(self):
         '''

@@ -103,8 +103,9 @@ class Commit(Base):
         Returns the diffs in the commit
         '''
         blames = []
-        for test_result in self.test_results:
-            blames.extend(test_result.blames)
+        for test_run in self.test_runs:
+            for test_result in test_run.test_results:
+                blames.extend(test_result.blames)
 
         return blames
 

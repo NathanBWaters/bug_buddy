@@ -30,16 +30,38 @@ def synthetic_blame(repository: Repository,
     '''
     session = Session.object_session(repository)
     diffs = commit.diffs
+    diff_ids = [diff.id for diff in diffs]
     test_failures = test_run.failed_tests
 
-    for test_failure in test_failures:
+    # Get the list of commits that are made up of the subset of diffs in this
+    # commit
+    children_commit_ids = (
+        session.query(DiffCommitLink).
+        filter(DiffCommitLink.diff_id.in_(diff_ids)).
+        group_by(DiffCommitLink.commit_id).all())
+    children_commits = (
+        session.query(Commit)
+        .filter(Commit.id.in_(children_commit_ids)).all())
 
-        # look up to see if the test that failed has failed in the past with
-        # one of the subsets of the currently present diffs.  If it has, then
-        # we already know which subset of the diffs are to blame for the test
-        # failure.  If we can store with the blame is "new", then we can quickly
-        # filter on just the original blame
-        session.query(Blame).join(TestResult).filter(Blame)
+    for test_failure in test_failures:
+        # get all the blames for this test failure that were new at the time.
+        # The newness attribute should remove duplicates.
+        # All of these blames will now be combined for a new blame for this
+        # test failure.
+
+        # Any diff that is in this commit that wasn't in the commits 
+
+        # It is a completely new test_failure, that cannot be attributed to any
+        # previous edits if:
+        #  
+
+        # Requirement for memoized blame:
+        #  1) Get all 
+        previous_failing_instances = test_failure.test.failing_instances
+        failing_instances_ids = [failing_instance.id for failing_instance
+                                 in previous_failing_instances]
+
+
         # session.query(Address).filter(Address.person == person).all()
 
 

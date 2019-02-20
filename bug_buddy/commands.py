@@ -2,6 +2,8 @@
 '''
 The argparse subcommands
 '''
+from mock import Mock
+
 from bug_buddy.logger import logger
 from bug_buddy.db import create, get, delete, session_manager
 from bug_buddy.schema import Repository
@@ -23,6 +25,7 @@ def train(path: str):
     '''
     Trains a neural network on the available data
     '''
+    pass
 
 
 def initialize(path: str,
@@ -108,16 +111,17 @@ def delete_repository(path: str):
     with session_manager() as session:
         repository = get(session, Repository, url=url)
 
-        if repository:
-            msg = ('Are you sure you want to delete {}?\n'
-                   'This will delete the bug_buddy branch and all data associated '
-                   'with this project from the database.  (y/n)\n'
-                   .format(repository))
-            should_initialize = input(msg)
+        msg = ('Are you sure you want to delete {}?\n'
+               'This will delete the bug_buddy branch and all data associated '
+               'with this project from the database.  (y/n)\n'
+               .format(path))
+        should_initialize = input(msg)
 
-            if _confirmed(should_initialize):
-                delete_bug_buddy_branch(repository)
-                delete(session, repository)
+        if _confirmed(should_initialize):
+            delete_bug_buddy_branch(repository or Mock(path=path))
+
+        if repository:
+            delete(session, repository)
 
         else:
             logger.info('No matching repo found in the database')

@@ -2,7 +2,7 @@
 '''
 The TestResult model.  The pass/fail for a test at a particular commit.
 '''
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
+from sqlalchemy import Column, ForeignKey, Integer, String, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -25,6 +25,8 @@ class TestResult(Base):
     test_run_id = Column(Integer, ForeignKey('test_run.id'))
     test_run = relationship('TestRun', back_populates='test_results')
 
+    time = Column(Float, nullable=False)
+
     # Whether or not the test passed or failed
     status = Column(String, nullable=False)
 
@@ -40,10 +42,11 @@ class TestResult(Base):
         cascade='all, delete, delete-orphan'
     )
 
-    def __init__(self, test: Test, test_run: TestRun, status: str):
+    def __init__(self, test: Test, test_run: TestRun, status: str, time: float):
         '''
         Creates a new TestResults instance
         '''
         self.test = test
         self.test_run = test_run
         self.status = status
+        self.time = time

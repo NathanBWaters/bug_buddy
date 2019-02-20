@@ -32,6 +32,12 @@ class Function(Base):
     repository_id = Column(Integer, ForeignKey('repository.id'))
     repository = relationship('Repository', back_populates='functions')
 
+    # relative path to file
+    synthetic_diff_id = Column(Integer,
+                               ForeignKey('diff.id'),
+                               nullable=True)
+    synthetic_diff = relationship('Diff')
+
     function_history = relationship(
         'FunctionHistory',
         back_populates='function',
