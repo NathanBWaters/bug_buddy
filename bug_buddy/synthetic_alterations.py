@@ -63,55 +63,52 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
     '''
     Creates multiple synthetic changes and test results
     '''
-    with session_manager() as session:
-        session.add(repository)
+    session = Session.object_session(repository)
+    snapshot_initialization(repository)
 
-        snapshot_initialization(repository)
+    num_runs = 0
+    for diff_set in powerset(repository.diffs):
+        logger.info('On run #{} with: {}'.format(num_runs, diff_set))
 
-        num_runs = 0
-        for diff_set in powerset(repository.diffs):
-            logger.info('On run #{} with: {}'.format(num_runs, diff_set))
+        # see if we already have a commit and test run for the diff set.
+        # if we do, continue
+        commit = get_matching_commit_for_diffs(repository, diff_set)
 
-            # see if we already have a commit and test run for the diff set.
-            # if we do, continue
-            commit = get_matching_commit_for_diffs(repository, diff_set)
+        # if the commit does not already exist for this set, then we need
+        # to create it and run tests against it
+        if not commit:
+            logger.info('Creating a new commit for diff_set: {}'
+                        .format(diff_set))
+            # revert back to a clean repository
+            reset_branch(repository)
 
-            # if the commit does not already exist for this set, then we need
-            # to create it and run tests against it
-            if not commit:
-                logger.info('Creating a new commit for diff_set: {}'
-                            .format(diff_set))
-                # revert back to a clean repository
-                reset_branch(repository)
+            # apply diffs
+            for diff in diff_set:
+                add_diff(diff)
 
-                # apply diffs
-                for diff in diff_set:
-                    add_diff(diff)
+            # create a commit.  Only allow an empty commit if there nothing
+            # in the diff
+            commit = create_commit(repository, allow_empty=not diff_set)
 
-                # create a commit.  Only allow an empty commit if there nothing
-                # in the diff
-                commit = create_commit(repository, allow_empty=not diff_set)
+            snapshot_diff_commit_link(commit, diff_set)
 
-                snapshot_diff_commit_link(commit, diff_set)
+            # push newly created commit
+            git_push(repository)
 
-                # push newly created commit
-                git_push(repository)
+        if not commit.test_runs:
+            # run all tests against the synthetic change
+            run_test(commit)
 
-            if not commit.test_runs:
-                logger.info('Running the tests against commit: {}'
-                            .format(commit))
-                # run all tests against the synthetic change
-                test_run = run_test(repository, commit)
+        # if commit.needs_blaming():
+        #     synthetic_blame(commit, commit.test_runs[0])
 
-            if not commit.blames:
-                pass
-                # logger.info('Setting blame for commit: {}'.format(commit))
-                # determine which diffs caused which test failures
-                # synthetic_blame(repository, commit, test_run)
-            session.commit()
-            logger.info('Completed run #{}'.format(num_runs))
+        session.commit()
+        logger.info('Completed run #{}'.format(num_runs))
 
-            num_runs += 1
+        num_runs += 1
+        if run_limit and num_runs >= run_limit:
+            logger.info('Completed all #{} runs.  Exiting'.format(num_runs))
+            break
 
 
 def _get_assert_statement(repo_function):

@@ -14,13 +14,14 @@ from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, TestRun, Commit
 
 
-def run_test(repository: Repository, commit: Commit):
+def run_test(commit: Commit):
     '''
     Runs a repository's tests and records the results
     '''
+    logger.info('Running the tests against commit: {}'.format(commit))
     test_run = None
 
-    if 'pytest' not in repository.test_commands:
+    if 'pytest' not in commit.repository.test_commands:
         msg = 'BugBuddy has not implemented non-pytest testing yet'
         raise BugBuddyError(msg)
 
@@ -29,14 +30,14 @@ def run_test(repository: Repository, commit: Commit):
             prefix="bugbuddy_test_output_",
             suffix=".xml")
         command = '{cmd} --junitxml={path}'.format(
-            cmd=repository.test_commands,
+            cmd=commit.repository.test_commands,
             path=temp_output.name)
 
         start_timestamp = time.time()
         date = datetime.utcfromtimestamp(start_timestamp).strftime('%Y-%m-%d %H:%M:%S')
         logger.info('Testing {repo_name} at commit "{commit_id}" at {date} '
                     'with command:\n{command}'
-                    .format(repo_name=repository.name,
+                    .format(repo_name=commit.repository.name,
                             commit_id=commit.commit_id,
                             command=command,
                             date=date))
@@ -44,13 +45,13 @@ def run_test(repository: Repository, commit: Commit):
         process = subprocess.Popen(
             command,
             shell=True,
-            cwd=repository.path,
+            cwd=commit.repository.path,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE)
 
         stdout, stderr = process.communicate()
 
-        session = Session.object_session(repository)
+        session = Session.object_session(commit.repository)
         test_run = create(
             session,
             TestRun,
@@ -60,7 +61,7 @@ def run_test(repository: Repository, commit: Commit):
         # we were succesfully able to create a test run
         create_results_from_junit_xml(
             temp_output.name,
-            repository,
+            commit.repository,
             test_run)
 
         logger.info(test_run)

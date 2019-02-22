@@ -40,5 +40,5 @@ class DiffCommitLink(Base):
         Converts the DiffCommitLink into a string
         '''
         return ('<DiffCommitLink diff={diff_id} | commit={commit_id} />'
-                .format(diff=self.diff.id,
-                        commit=self.commit.id))
+                .format(diff_id=self.diff.id,
+                        commit_id=self.commit.id))

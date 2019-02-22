@@ -98,7 +98,7 @@ def generate(path: str, run_limit: int=None):
 
         logger.info('Creating synthetic results for: {}'.format(repository))
 
-    generate_synthetic_test_results(repository, run_limit)
+        generate_synthetic_test_results(repository, run_limit)
 
 
 def delete_repository(path: str):

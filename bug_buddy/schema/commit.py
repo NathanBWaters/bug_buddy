@@ -43,6 +43,12 @@ class Commit(Base):
     #     'Commit',
     #     back_populates='parent_commit')
 
+    # this is kind of a hack.  Synthetic commits are created from synthetic
+    # diffs.  Retrieving the powerset of a set of diffs from the database is
+    # prohibitively expensive.  So we will hash the sorted list of synthetic
+    # diff ids and use that hash to retrieve the 'child' commits of a commit.
+    synthetic_diff_hash = Column(Integer, nullable=True)
+
     test_runs = relationship('TestRun',
                              back_populates='commit',
                              cascade='all, delete, delete-orphan')
@@ -108,6 +114,12 @@ class Commit(Base):
                 blames.extend(test_result.blames)
 
         return blames
+
+    def needs_blaming(self):
+        '''
+        Whether the commit needs to undergo the blame process
+        '''
+        return self.causes_test_failures() and not self.blames
 
     def __repr__(self):
         '''

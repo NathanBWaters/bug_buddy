@@ -6,7 +6,12 @@ from junitparser import JUnitXml
 
 from bug_buddy.constants import (ERROR_STATEMENT,
                                  SYNTHETIC_FIXING_CHANGE)
-from bug_buddy.db import Session, get_or_create, create, session_manager
+from bug_buddy.db import (
+    Session,
+    get_or_create,
+    create,
+    session_manager,
+    get_all)
 from bug_buddy.git_utils import create_commit
 from bug_buddy.logger import logger
 from bug_buddy.runner import run_test
@@ -18,51 +23,92 @@ from bug_buddy.schema import (
     TestResult,
     TestRun,
     Commit)
+from bug_buddy.schema.aliases import DiffList
 from bug_buddy.snapshot import snapshot_commit
 
 
-def synthetic_blame(repository: Repository,
-                    commit: Commit,
+def synthetic_blame_all_commits(repository: Repository):
+    '''
+    Synthetically blames all commits in order of the number of diffs that they
+    have associated with them for a repository
+    '''
+    session = Session.object_session(repository)
+    commits = get_all(session, Commit, repository_id=repository.id)
+    commits.sort(key=lambda commit: len(commit.diffs), reverse=False)
+    for commit in commits:
+        # if the commit has already been blamed, no need to blame it again
+        if commit.needs_blaming():
+            test_run = commit.test_runs[0]
+            synthetic_blame(test_run)
+
+
+def synthetic_blame(commit: Commit,
                     test_run: TestRun):
     '''
     Given a synthetic commit, it will create blames for the commit based on
     the blames of the sub-combinations of the diffs
     '''
-    session = Session.object_session(repository)
-    diffs = commit.diffs
-    diff_ids = [diff.id for diff in diffs]
-    test_failures = test_run.failed_tests
+    if not test_run.failed_tests:
+        logger.info('No failing tests for commit {}, nothing to blame'
+                    .format(commit))
+        return
+
+    logger.info('Setting blame for commit: {}'.format(commit))
+    session = Session.object_session(commit)
 
     # Get the list of commits that are made up of the subset of diffs in this
     # commit
-    children_commit_ids = (
-        session.query(DiffCommitLink).
-        filter(DiffCommitLink.diff_id.in_(diff_ids)).
-        group_by(DiffCommitLink.commit_id).all())
-    children_commits = (
-        session.query(Commit)
-        .filter(Commit.id.in_(children_commit_ids)).all())
+    children_commits = []
+    for diff_set in powerset(commit.diffs):
+        # an empty set in the powerset is ignored
+        if not diff_set:
+            continue
 
-    for test_failure in test_failures:
+        # there is only one diff_set that is the same length as the commit's
+        # diff, which means they're the exact same diff set, so it's not really
+        # a child of the commit
+        if len(diff_set) == len(commit.diffs):
+            break
+
+        diff_hash = get_diff_set_hash(diff_set)
+        child_commit = (
+            session.query(Commit)
+            .filter(Commit.synthetic_diff_hash == diff_hash).one())
+        children_commits.append(child_commit)
+
+    for test_failure in test_run.failed_tests:
         # get all the blames for this test failure that were new at the time.
         # The newness attribute should remove duplicates.
         # All of these blames will now be combined for a new blame for this
         # test failure.
+        children_test_failure_blames = []
+        for child_commit in children_commits:
+            if child_commit.has_test_failure(test_failure):
+                child_test_failure = (
+                    child_commit.get_test_failure(test_failure))
+                for blame in child_test_failure.blames:
+                    children_test_failure_blames.append(blame)
 
-        # Any diff that is in this commit that wasn't in the commits 
+        if children_test_failure_blames:
+            faulty_diffs = list(set(
+                [blame.diff for blame in children_test_failure_blames]))
 
-        # It is a completely new test_failure, that cannot be attributed to any
-        # previous edits if:
-        #  
+            for faulty_diff in faulty_diffs:
+                create(session,
+                       Blame,
+                       diff=faulty_diff,
+                       test_failure=test_failure)
 
-        # Requirement for memoized blame:
-        #  1) Get all 
-        previous_failing_instances = test_failure.test.failing_instances
-        failing_instances_ids = [failing_instance.id for failing_instance
-                                 in previous_failing_instances]
+        else:
+            # We have created a completely new blame from this combination of
+            # diffs in comparison from its child
+            for diff in commit.diffs:
+                create(session,
+                       Blame,
+                       diff=diff,
+                       test_result=test_failure)
 
-
-        # session.query(Address).filter(Address.person == person).all()
+    logger.info('Completed blaming for {}'.format(commit))
 
 
 def get_matching_commit_for_diffs(repository, diff_set):
@@ -74,7 +120,10 @@ def get_matching_commit_for_diffs(repository, diff_set):
 
     if not diff_ids:
         # return a commit that does not have a diff
-        return session.query(Commit).filter(Commit.diff_links == None).first()
+        return (
+            session.query(Commit)
+            .filter(Commit.diff_links == None)  # noqa: E711
+            .first())
 
     # get the commit that has a mapping to those two diffs
     matching_commits = (
@@ -85,6 +134,15 @@ def get_matching_commit_for_diffs(repository, diff_set):
         commit_diff_ids = [diff.id for diff in matching_commit.diffs]
         if sorted(diff_ids) == sorted(commit_diff_ids):
             return matching_commit
+
+
+def get_diff_set_hash(diffs: DiffList):
+    '''
+    Given a list of diffs, return the hash
+    '''
+    diff_ids = [diff.id for diff in diffs]
+    diff_ids.sort()
+    return hash(frozenset(diff_ids))
 
 
 def powerset(diffs):

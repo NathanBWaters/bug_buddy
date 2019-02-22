@@ -14,8 +14,8 @@ from bug_buddy.schema.diff import Diff
 
 class Blame(Base):
     '''
-    Schema representation of a Blame.  Relates one diff to a test failure, but
-    of course there can be multiple diffs to be blamed for a test failure.
+    Schema representation of a Blame.
+    It is a Many to Many relationship between diffs and synthetic diffs.
     '''
     __tablename__ = 'blame'
 
@@ -27,20 +27,14 @@ class Blame(Base):
     test_result_id = Column(Integer, ForeignKey('test_result.id'))
     test_result = relationship('TestResult', back_populates='blames')
 
-    # Uses for synthetic blaming in determining the first time the blame was
-    # created
-    # is_new = Column(Boolean, nullable=False)
-
     def __init__(self,
                  diff: Diff,
-                 test_result: TestResult,
-                 is_new: bool):
+                 test_result: TestResult):
         '''
         Creates a new Blame instance.
         '''
         self.diff = diff
         self.test_result = test_result
-        self.is_new = is_new
 
     def __repr__(self):
         '''
