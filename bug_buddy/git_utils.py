@@ -45,10 +45,12 @@ def run_cmd(repository: Repository, command: str, log=False):
 
 def is_repo_clean(repository: Repository):
     '''
-    Asserts that the repository is clean
-    https://stackoverflow.com/a/45989092/4447761
+    Asserts that the repository is clean, meaning there are no changes between
+    the working tree and the HEAD
+
+    https://stackoverflow.com/a/1587952
     '''
-    cmd = ['git', 'diff', '--exit-code']
+    cmd = ['git', 'diff', 'HEAD', '--exit-code']
     child = subprocess.Popen(cmd,
                              cwd=repository.path,
                              stdout=subprocess.PIPE,
@@ -300,7 +302,7 @@ def get_commits_only_in_branch(repository, branch='origin/bug_buddy') -> List[st
     return stdout.split('\n')
 
 
-def reset_branch(repository: Repository):
+def revert_to_master(repository: Repository):
     '''
     Creates a new commit which contains the same content as a fresh branch
     without any of it's previous edits.
@@ -311,22 +313,20 @@ def reset_branch(repository: Repository):
     logger.info('Starting to create reset commit')
     set_bug_buddy_branch(repository)
 
-    bug_buddy_commits = get_commits_only_in_branch(repository,
-                                                   branch='bug_buddy')
-    bug_buddy_commits = ' '.join(bug_buddy_commits)
-
     # create the changes that effectively reverts all work we have done on this
     # branch
-    command = ('git revert --no-commit {bug_buddy_commits}'
-               .format(bug_buddy_commits=bug_buddy_commits))
-    run_cmd(repository, command)
+    run_cmd(repository, 'git checkout master {}'.format(repository.path))
+    run_cmd(repository, 'git reset {}'.format(repository.path))
+
+    return
 
 
 def create_reset_commit(repository: Repository):
     '''
     Resets the branch, and then creates a commit out of that change
     '''
-    reset_branch(repository)
+    revert_to_master(repository)
+
     # it's possible that nothing has been changed after the git revert.
     # For example, if the initial synthetic commit only added 'assert False'
     # and then they were all undone. If so, then trying to create a commit

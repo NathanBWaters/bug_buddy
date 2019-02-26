@@ -48,7 +48,6 @@ from bug_buddy.git_utils import (add_diff,
                                  revert_unstaged_changes,
                                  run_cmd,
                                  set_bug_buddy_branch,
-                                 reset_branch,
                                  update_commit)
 from bug_buddy.runner import run_test, library_is_testable
 from bug_buddy.logger import logger
@@ -79,8 +78,9 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
         if not commit:
             logger.info('Creating a new commit for diff_set: {}'
                         .format(diff_set))
+
             # revert back to a clean repository
-            reset_branch(repository)
+            create_reset_commit(repository)
 
             # apply diffs
             for diff in diff_set:
@@ -99,8 +99,8 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
             # run all tests against the synthetic change
             run_test(commit)
 
-        # if commit.needs_blaming():
-        #     synthetic_blame(commit, commit.test_runs[0])
+        if commit.needs_blaming():
+            synthetic_blame(commit, commit.test_runs[0])
 
         session.commit()
         logger.info('Completed run #{}'.format(num_runs))

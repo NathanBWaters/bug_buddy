@@ -118,9 +118,11 @@ def delete_repository(path: str):
         should_initialize = input(msg)
 
         if _confirmed(should_initialize):
+            logger.info('Deleting bug_buddy branch')
             delete_bug_buddy_branch(repository or Mock(path=path))
 
         if repository:
+            logger.info('Deleting data from the database')
             delete(session, repository)
 
         else:
