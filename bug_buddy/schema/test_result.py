@@ -50,3 +50,12 @@ class TestResult(Base):
         self.test_run = test_run
         self.status = status
         self.time = time
+
+    def __repr__(self):
+        '''
+        Converts the repository into a string
+        '''
+        return ('<TestResult {id} | {name} | {status} />'
+                .format(id=self.id,
+                        name=self.test.name,
+                        status=self.status))

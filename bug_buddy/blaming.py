@@ -5,9 +5,11 @@ import itertools
 from junitparser import JUnitXml
 
 from bug_buddy.constants import (ERROR_STATEMENT,
+                                 TEST_OUTPUT_FAILURE,
                                  SYNTHETIC_FIXING_CHANGE)
 from bug_buddy.db import (
     Session,
+    get,
     get_or_create,
     create,
     session_manager,
@@ -48,6 +50,7 @@ def synthetic_blame(commit: Commit,
     Given a synthetic commit, it will create blames for the commit based on
     the blames of the sub-combinations of the diffs
     '''
+    import pdb; pdb.set_trace()
     if not test_run.failed_tests:
         logger.info('No failing tests for commit {}, nothing to blame'
                     .format(commit))
@@ -83,9 +86,12 @@ def synthetic_blame(commit: Commit,
         # test failure.
         children_test_failure_blames = []
         for child_commit in children_commits:
-            if child_commit.has_test_failure(test_failure):
+            if child_commit.has_same_test_result_output(
+                    test_failure,
+                    status=SYNTHETIC_FIXING_CHANGE):
                 child_test_failure = (
-                    child_commit.get_test_failure(test_failure))
+                    child_commit.get_matching_test(test_failure))
+
                 for blame in child_test_failure.blames:
                     children_test_failure_blames.append(blame)
 
@@ -115,25 +121,9 @@ def get_matching_commit_for_diffs(repository, diff_set):
     '''
     Given a set of diffs, return if there is a commit that has those diffs
     '''
-    diff_ids = [diff.id for diff in diff_set]
     session = Session.object_session(repository)
-
-    if not diff_ids:
-        # return a commit that does not have a diff
-        return (
-            session.query(Commit)
-            .filter(Commit.diff_links == None)  # noqa: E711
-            .first())
-
-    # get the commit that has a mapping to those two diffs
-    matching_commits = (
-        session.query(Commit)
-               .join(DiffCommitLink)
-               .filter(DiffCommitLink.diff_id.in_(diff_ids)).all())
-    for matching_commit in matching_commits:
-        commit_diff_ids = [diff.id for diff in matching_commit.diffs]
-        if sorted(diff_ids) == sorted(commit_diff_ids):
-            return matching_commit
+    diff_hash = get_diff_set_hash(diff_set)
+    return get(session, Commit, synthetic_diff_hash=diff_hash)
 
 
 def get_diff_set_hash(diffs: DiffList):

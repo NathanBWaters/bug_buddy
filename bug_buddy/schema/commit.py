@@ -85,6 +85,27 @@ class Commit(Base):
         self.commit_type = commit_type
         # self.parent_commit = parent_commit
 
+    def get_matching_test_result(self, test_result):
+        '''
+        Retuns the corresponding test output
+        '''
+        test_run = self.test_runs[0]
+        matching_test_results = [
+            commit_test_result for commit_test_result in test_run.test_results
+            if commit_test_result.test.id == test_result.test.id
+        ]
+        if not matching_test_results:
+            msg = ('Could not find a matching test result for {} at {}'
+                   .format(test_result, self))
+            raise BugBuddyError(msg)
+
+        if len(matching_test_results) > 1:
+            msg = ('Found multiple matching test_results for {} at {}'
+                   .format(test_result, self))
+            raise BugBuddyError(msg)
+
+        return matching_test_results[0]
+
     def causes_test_failures(self):
         '''
         Returns a bool if the commit causes any test failures
@@ -120,6 +141,25 @@ class Commit(Base):
         Whether the commit needs to undergo the blame process
         '''
         return self.causes_test_failures() and not self.blames
+
+    def has_same_test_result_output(self,
+                                    test_result,
+                                    status: str=None):
+        '''
+        Returns true if this commit had the same a test_result output
+
+        @param test_failure
+        '''
+        matching_test_result = self.get_matching_test_result(test_result)
+        if not matching_test_result:
+            return False
+
+        if status:
+            return (
+                matching_test_result.status == status and
+                test_result.status == status)
+
+        return matching_test_result.status == test_result.status
 
     def __repr__(self):
         '''
