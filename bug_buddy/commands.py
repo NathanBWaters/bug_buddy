@@ -4,6 +4,7 @@ The argparse subcommands
 '''
 from mock import Mock
 
+from bug_buddy.ai.predict_test_failures import train
 from bug_buddy.logger import logger
 from bug_buddy.db import create, get, delete, session_manager
 from bug_buddy.schema import Repository
@@ -21,11 +22,14 @@ def _confirmed(user_response):
     return user_response == 'y' or user_response == 'yes'
 
 
-def train(path: str):
+def train_repository(path: str):
     '''
     Trains a neural network on the available data
     '''
-    pass
+    url = get_repository_url_from_path(path)
+    with session_manager() as session:
+        repository = get(session, Repository, url=url)
+        logger.info('Training repository: "{}"'.format(repository))
 
 
 def initialize(path: str,

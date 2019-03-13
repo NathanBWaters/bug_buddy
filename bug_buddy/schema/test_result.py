@@ -42,6 +42,8 @@ class TestResult(Base):
         cascade='all, delete, delete-orphan'
     )
 
+    # we need a unique constraint on test results
+
     def __init__(self, test: Test, test_run: TestRun, status: str, time: float):
         '''
         Creates a new TestResults instance
@@ -55,7 +57,9 @@ class TestResult(Base):
         '''
         Converts the repository into a string
         '''
-        return ('<TestResult {id} | {name} | {status} />'
+        return ('<TestResult {id} | {file}.{classname}.{name} | {status} />'
                 .format(id=self.id,
                         name=self.test.name,
+                        file=self.test.file,
+                        classname=self.test.classname,
                         status=self.status))

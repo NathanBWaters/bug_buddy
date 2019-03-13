@@ -25,6 +25,7 @@ import os
 import random
 import re
 import sys
+import time
 from typing import List
 
 from bug_buddy.schema.aliases import DiffList
@@ -60,7 +61,6 @@ from bug_buddy.snapshot import (snapshot_commit,
 from bug_buddy.source import create_synthetic_alterations
 
 
-
 def yield_blame_set(repository: Repository):
     '''
     Returns a set of diffs.
@@ -69,8 +69,16 @@ def yield_blame_set(repository: Repository):
     2) Once all diffs have been returned individually, it will then returns a
        set of 4 diffs that were randomly chosen.
     '''
-    session = Session.object_session(repository)
     diffs = repository.diffs
+
+    while True:
+        diff_set = []
+        for i in range(4):
+            diff_set.append(diffs[random.randint(0, len(diffs))])
+
+        logger.info('Yielding diff set: {}'.format(diff_set))
+        # remove duplicates if they exist
+        yield list(set(diff_set))
 
 
 def generate_synthetic_test_results(repository: Repository, run_limit: int):
@@ -78,64 +86,72 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
     Creates multiple synthetic changes and test results
     '''
     session = Session.object_session(repository)
-    snapshot_initialization(repository)
+    # snapshot_initialization(repository)
 
     num_runs = 0
-    for diff_set in powerset(repository.diffs):
-        logger.info('On run #{} with: {}'.format(num_runs, diff_set))
+    for diff_set in yield_blame_set(repository):
+        logger.info('On diff set: {}'.format(diff_set))
 
-        try:
-            # see if we already have a commit and test run for the diff set.
-            # if we do, continue
-            commit = get_matching_commit_for_diffs(repository, diff_set)
+        for diff_subset in powerset(diff_set):
+            logger.info('On run #{} with: {}'.format(num_runs, diff_subset))
 
-            # if the commit does not already exist for this set, then we need
-            # to create it and run tests against it
-            if not commit:
-                logger.info('Creating a new commit for diff_set: {}'
-                            .format(diff_set))
+            try:
+                # see if we already have a commit and test run for the diff set.
+                # if we do, continue
+                logger.debug('1: {}'.format(time.time()))
+                commit = get_matching_commit_for_diffs(repository, diff_subset)
 
-                # revert back to a clean repository
-                create_reset_commit(repository)
+                # if the commit does not already exist for this set, then we
+                # need to create it and run tests against it
+                if not commit:
+                    logger.info('Creating a new commit for diff_subset: {}'
+                                .format(diff_subset))
 
-                # apply diffs
-                for diff in diff_set:
-                    add_diff(diff)
+                    # revert back to a clean repository
+                    create_reset_commit(repository)
 
-                # create a commit.  Only allow an empty commit if there nothing
-                # in the diff
-                commit = create_commit(repository, allow_empty=not diff_set)
+                    # apply diffs
+                    for diff in diff_subset:
+                        add_diff(diff)
 
-                snapshot_diff_commit_link(commit, diff_set)
+                    # create a commit.  Only allow an empty commit if there nothing
+                    # in the diff
+                    commit = create_commit(repository,
+                                           commit_type=SYNTHETIC_CHANGE,
+                                           allow_empty=not diff_subset)
 
-            # add the commit hash id for its synthetic diffs
-            if not commit.synthetic_diff_hash:
-                commit.synthetic_diff_hash = get_diff_set_hash(diff_set)
-                logger.info('Added hash_ids #{} to commit: {}'
-                            .format(commit.synthetic_diff_hash, commit))
+                    snapshot_diff_commit_link(commit, diff_subset)
 
-            if not commit.test_runs:
-                # run all tests against the synthetic change
-                run_test(commit)
+                # add the commit hash id for its synthetic diffs
+                if not commit.synthetic_diff_hash:
+                    commit.synthetic_diff_hash = get_diff_set_hash(diff_subset)
+                    logger.info('Added hash_ids #{} to commit: {}'
+                                .format(commit.synthetic_diff_hash, commit))
 
-            if commit.needs_blaming():
-                synthetic_blame(commit, commit.test_runs[0])
+                if not commit.test_runs:
+                    # run all tests against the synthetic change
+                    run_test(commit)
 
-            session.commit()
-            # push newly created commit
-            git_push(repository)
-            logger.info('Completed run #{}'.format(num_runs))
+                logger.debug('2: {}'.format(time.time()))
+                if commit.needs_blaming():
+                    synthetic_blame(commit, commit.test_runs[0])
 
-            num_runs += 1
-            if run_limit and num_runs >= run_limit:
-                logger.info('Completed all #{} runs.  Exiting'.format(num_runs))
-                break
-        except Exception as e:
-            # revert all the local edits
-            logger.error('Hit the following exception: {}')
-            logger.error('Reverting local changes')
-            revert_to_master(repository)
-            raise e
+                logger.debug('3: {}'.format(time.time()))
+                session.commit()
+                # push newly created commit
+                # git_push(repository)
+                logger.info('Completed run #{}'.format(num_runs))
+
+                num_runs += 1
+                if run_limit and num_runs >= run_limit:
+                    logger.info('Completed all #{} runs.  Exiting'.format(num_runs))
+                    break
+            except Exception as e:
+                # revert all the local edits
+                logger.error('Hit the following exception: {}'.format(e))
+                logger.error('Reverting local changes')
+                revert_to_master(repository)
+                raise e
 
 
 def _get_assert_statement(repo_function):

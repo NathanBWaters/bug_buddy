@@ -50,7 +50,6 @@ def synthetic_blame(commit: Commit,
     Given a synthetic commit, it will create blames for the commit based on
     the blames of the sub-combinations of the diffs
     '''
-    import pdb; pdb.set_trace()
     if not test_run.failed_tests:
         logger.info('No failing tests for commit {}, nothing to blame'
                     .format(commit))
@@ -88,9 +87,9 @@ def synthetic_blame(commit: Commit,
         for child_commit in children_commits:
             if child_commit.has_same_test_result_output(
                     test_failure,
-                    status=SYNTHETIC_FIXING_CHANGE):
+                    status=TEST_OUTPUT_FAILURE):
                 child_test_failure = (
-                    child_commit.get_matching_test(test_failure))
+                    child_commit.get_matching_test_result(test_failure))
 
                 for blame in child_test_failure.blames:
                     children_test_failure_blames.append(blame)
@@ -100,19 +99,27 @@ def synthetic_blame(commit: Commit,
                 [blame.diff for blame in children_test_failure_blames]))
 
             for faulty_diff in faulty_diffs:
+                logger.info('Assigning blame using child commit {} blame {} '
+                            'for test failure: {}'
+                            .format(child_commit, faulty_diff, test_failure))
                 create(session,
                        Blame,
                        diff=faulty_diff,
-                       test_failure=test_failure)
+                       test_result=test_failure)
 
         else:
             # We have created a completely new blame from this combination of
             # diffs in comparison from its child
+
             for diff in commit.diffs:
-                create(session,
-                       Blame,
-                       diff=diff,
-                       test_result=test_failure)
+                blame = create(
+                    session,
+                    Blame,
+                    diff=diff,
+                    test_result=test_failure)
+                logger.info('Assigning new blame for commit {} blame {}'
+                            'for test failure: {}'
+                            .format(commit, blame, test_failure))
 
     logger.info('Completed blaming for {}'.format(commit))
 

@@ -13,7 +13,7 @@ def _train(args):
 
     @param args: the argparse arguments
     '''
-    commands.train(args.path.strip())
+    commands.train_repository(args.path.strip())
 
 
 def _analyze(args):

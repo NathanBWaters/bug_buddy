@@ -7,19 +7,8 @@ from bug_buddy.constants import (TEST_OUTPUT_SUCCESS,
                                  TEST_OUTPUT_FAILURE,
                                  TEST_OUTPUT_SKIPPED)
 from bug_buddy.db import Session, get_or_create, create, session_manager
+from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, TestResult, Test, TestRun, Commit
-
-
-def record_test_results(repository: Repository, test_run: TestRun) -> dict:
-    '''
-    Analyze a repository for a given commit.  The results are saved to the
-    database.
-
-    @param repository: the repository to be analyzed
-    @param run: the run to be analyzed
-    '''
-    print('Implement run_test')
-    assert False
 
 
 def create_results_from_junit_xml(output_file: str,
@@ -32,7 +21,22 @@ def create_results_from_junit_xml(output_file: str,
     session = Session.object_session(test_run)
     xml_output = JUnitXml.fromfile(output_file)
 
+    test_names = []
+
     for test_case in xml_output:
+        # There can seemingly be duplicate test outputs for a test if both
+        # the test and the test's teardown step both fail.  So we will ignore
+        # the second test output
+        unique_id = '{}/{}/{}'.format(test_case.name,
+                                      test_case._elem.attrib.get('file'),
+                                      test_case._elem.attrib.get('classname'))
+        if unique_id in test_names:
+            logger.error('There was a duplicate test output for test: {}'
+                         .format(test_case.name))
+            continue
+
+        test_names.append(unique_id)
+
         test, _ = get_or_create(
             session,
             Test,

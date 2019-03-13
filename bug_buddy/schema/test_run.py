@@ -95,10 +95,15 @@ class TestRun(Base):
         '''
         Converts the repository into a string
         '''
+        passed = self.num_passed_tests
+        failed = self.num_failed_tests
+        skipped = self.num_skipped_tests
+        total = passed + failed + skipped
         return ('<TestRun {id} | {commit_id} | Passed: {passed} | '
-                'Failed: {failed} | Skipped: {skipped} />'
+                'Failed: {failed} | Skipped: {skipped} | total={total} />'
                 .format(id=self.id,
                         commit_id=self.commit_id,
-                        passed=self.num_passed_tests,
-                        failed=self.num_failed_tests,
-                        skipped=self.num_skipped_tests))
+                        passed=passed,
+                        failed=failed,
+                        skipped=skipped,
+                        total=total))

@@ -95,11 +95,13 @@ class Commit(Base):
             if commit_test_result.test.id == test_result.test.id
         ]
         if not matching_test_results:
+            import pdb; pdb.set_trace()
             msg = ('Could not find a matching test result for {} at {}'
                    .format(test_result, self))
             raise BugBuddyError(msg)
 
         if len(matching_test_results) > 1:
+            import pdb; pdb.set_trace()
             msg = ('Found multiple matching test_results for {} at {}'
                    .format(test_result, self))
             raise BugBuddyError(msg)
