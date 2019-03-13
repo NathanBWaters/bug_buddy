@@ -30,6 +30,7 @@ def train_repository(path: str):
     with session_manager() as session:
         repository = get(session, Repository, url=url)
         logger.info('Training repository: "{}"'.format(repository))
+        train(repository)
 
 
 def initialize(path: str,

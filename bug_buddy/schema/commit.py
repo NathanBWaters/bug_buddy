@@ -70,7 +70,6 @@ class Commit(Base):
                  commit_id: str,
                  branch: str,
                  commit_type: str=SYNTHETIC_CHANGE,
-                 # parent_commit=None
                  ):  # Commit
         '''
         Creates a new TestResults instance
@@ -83,7 +82,6 @@ class Commit(Base):
         self.commit_id = commit_id
         self.branch = branch
         self.commit_type = commit_type
-        # self.parent_commit = parent_commit
 
     def get_matching_test_result(self, test_result):
         '''

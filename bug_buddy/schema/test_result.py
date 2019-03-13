@@ -6,6 +6,7 @@ from sqlalchemy import Column, ForeignKey, Integer, String, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
+from bug_buddy.constants import TEST_OUTPUT_FAILURE
 from bug_buddy.schema.base import Base
 from bug_buddy.schema.test import Test
 from bug_buddy.schema.test_run import TestRun
@@ -43,6 +44,12 @@ class TestResult(Base):
     )
 
     # we need a unique constraint on test results
+    @property
+    def failed(self):
+        '''
+        Whether the test failed or not
+        '''
+        return self.status == TEST_OUTPUT_FAILURE
 
     def __init__(self, test: Test, test_run: TestRun, status: str, time: float):
         '''
