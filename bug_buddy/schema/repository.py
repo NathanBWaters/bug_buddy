@@ -77,7 +77,7 @@ class Repository(Base):
         self.url = url
         self.initialize_commands = initialize_commands
         self.test_commands = test_commands
-        self.path = path
+        self.path = os.path.abspath(path)
         self.src_directory = src_directory
 
     @property

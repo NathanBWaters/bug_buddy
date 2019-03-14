@@ -5,12 +5,14 @@ The argparse subcommands
 from mock import Mock
 
 from bug_buddy.ai.predict_test_failures import train
+from bug_buddy.cli import is_affirmative
 from bug_buddy.logger import logger
 from bug_buddy.db import create, get, delete, session_manager
 from bug_buddy.schema import Repository
 from bug_buddy.git_utils import (delete_bug_buddy_branch,
                                  get_repository_url_from_path,
-                                 get_repository_name_from_url)
+                                 get_repository_name_from_url,
+                                 is_repo_clean)
 from bug_buddy.snapshot import snapshot_initialization
 from bug_buddy.synthetic_alterations import generate_synthetic_test_results
 from bug_buddy.watcher import watch
@@ -89,7 +91,7 @@ def delete_command(path: str):
                .format(path))
         should_delete = input(msg)
 
-        if _confirmed(should_delete):
+        if is_affirmative(should_delete):
             logger.info('Deleting bug_buddy branch')
             delete_bug_buddy_branch(repository or Mock(path=path))
 
@@ -137,6 +139,10 @@ def _initialize_repository(session,
             src_directory=src_directory,
             path=path)
 
+    while not is_repo_clean(repository):
+        msg = ('You cannot initialize an unclean repository.  Please clean '
+               'the repository and then hit enter')
+
     snapshot_initialization(repository)
 
     session.commit()
@@ -157,17 +163,9 @@ def _get_repository_from_path(session, path: str):
                'like to initialize the repository?  (y/n)\n'
                .format(path))
         should_initialize = input(msg)
-        if _confirmed(should_initialize):
+        if is_affirmative(should_initialize):
             repository = _initialize_repository(session, path)
         else:
             logger.info('No worries!')
 
     return repository
-
-
-def _confirmed(user_response):
-    '''
-    Utility for determining if the user responded positively or not
-    '''
-    return user_response == 'y' or user_response == 'yes'
-

@@ -2,8 +2,6 @@
 Supervised Learning algorithm for predicting which tests will fail given
 a commit.
 '''
-from keras.models import Sequential
-from keras.layers import Dense
 import numpy
 import random
 
@@ -15,6 +13,8 @@ def train(repository: Repository):
     '''
     Creates and trains a neural network.  It then exports a model.
     '''
+    from keras.models import Sequential
+    from keras.layers import Dense
     (train_features,
      train_labels,
      validation_features,
