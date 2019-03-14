@@ -13,7 +13,16 @@ def _train(args):
 
     @param args: the argparse arguments
     '''
-    commands.train_repository(args.path.strip())
+    commands.train_command(args.path.strip())
+
+
+def _watch(args):
+    '''
+    Parses arguments and passes them to the train subcommand module
+
+    @param args: the argparse arguments
+    '''
+    commands.watch_command(args.path.strip())
 
 
 def _analyze(args):
@@ -22,7 +31,7 @@ def _analyze(args):
 
     @param args: the argparse arguments
     '''
-    commands.analyze(args.path.strip())
+    commands.analyze_command(args.path.strip())
 
 
 def _delete(args):
@@ -31,7 +40,7 @@ def _delete(args):
 
     @param args: the argparse arguments
     '''
-    commands.delete_repository(args.path.strip())
+    commands.delete_command(args.path.strip())
 
 
 def _generate(args):
@@ -40,8 +49,9 @@ def _generate(args):
 
     @param args: the argparse arguments
     '''
-    commands.generate(args.repository.strip(),
-                      run_limit=int(args.num_runs) if args.num_runs else None)
+    commands.generate_command(
+        args.repository.strip(),
+        run_limit=int(args.num_runs) if args.num_runs else None)
 
 
 def _initialize(args):
@@ -137,6 +147,19 @@ if __name__ == '__main__':
         'path',
         type=str,
         help='Path to the repository you want to train')
+
+    ###################################
+    #  Watch SubCommand
+    ###################################
+    watch_command = subparsers.add_parser(
+        'watch',
+        description='Watches a repository and records any changes',
+        help=('Watches a repository and records any changes'))
+    watch_command.set_defaults(func=_watch)
+    watch_command.add_argument(
+        'path',
+        type=str,
+        help='Path to the repository you want to watch')
 
     args = parser.parse_args()
     args.func(args)
