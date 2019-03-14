@@ -15,11 +15,23 @@ class Watchdog(FileSystemEventHandler):
     '''
     Is notified every time an event occurs on the fileystem
     '''
+    def __init__(self, repository):
+        '''
+        Create a Watchdog instance
+        '''
+        super().__init__()
+        self.repository = repository
+
     def on_any_event(self, event):
         '''
         Catches all events
         '''
-        print('event: ', event)
+        print('{} event: {}'.format(self.repository.name, event))
+
+        # make sure there is an actual change recognized by git
+        if is_repo_dirty(self.repository):
+            # Copy the change over to the mirror repository
+            
 
 
 def watch(repository: Repository):
@@ -27,7 +39,7 @@ def watch(repository: Repository):
     Watches the repository's filesystem for changes and records the changes.
     It also notifies the user when there is an update in the test output.
     '''
-    event_handler = Watchdog()
+    event_handler = Watchdog(repository)
     observer = Observer()
     observer.schedule(event_handler, repository.path, recursive=True)
     observer.start()

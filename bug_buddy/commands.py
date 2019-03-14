@@ -142,6 +142,7 @@ def _initialize_repository(session,
     while not is_repo_clean(repository):
         msg = ('You cannot initialize an unclean repository.  Please clean '
                'the repository and then hit enter')
+        input(msg)
 
     snapshot_initialization(repository)
 
