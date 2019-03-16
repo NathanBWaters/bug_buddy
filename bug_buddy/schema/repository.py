@@ -57,10 +57,6 @@ class Repository(Base):
         'Function',
         back_populates='repository',
         cascade='all, delete, delete-orphan')
-    diffs = relationship(
-        'Diff',
-        back_populates='repository',
-        cascade='all, delete, delete-orphan')
 
     repository_files = []
 

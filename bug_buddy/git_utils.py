@@ -18,8 +18,9 @@ from bug_buddy.constants import (
 from bug_buddy.db import create, Session, get, get_or_create_diff
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
-from bug_buddy.schema import Commit, Diff, Repository
+from bug_buddy.schema import Commit, Diff, Repository, Function
 
+RANGE_INFO_REGEX = '@@ -?\d+,\d+ \+\d+,\d+ @@'
 RANGE_INFO_REGEX = '@@ -?\d+,\d+ \+\d+,\d+ @@'
 
 
@@ -34,25 +35,26 @@ def run_cmd(repository: Repository, command: str, log=False):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE)
     stdout, stderr = process.communicate()
-    if log:
+    if log or stderr:
         if stdout:
-            logger.info(stdout)
+            logger.info('stdout from command: "{}"\n{}'.format(command, stdout))
         if stderr:
-            logger.error(stderr)
+            logger.error('stderr from command: "{}"\n{}'.format(command, stderr))
 
     return stdout.decode("utf-8").strip(), stderr.decode("utf-8").strip()
 
 
-def is_repo_clean(repository: Repository):
+def is_repo_clean(repository: Repository, path=None):
     '''
     Asserts that the repository is clean, meaning there are no changes between
     the working tree and the HEAD
 
     https://stackoverflow.com/a/1587952
     '''
+    path = path or repository.path
     cmd = ['git', 'diff', 'HEAD', '--exit-code']
     child = subprocess.Popen(cmd,
-                             cwd=repository.path,
+                             cwd=path,
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE)
     child.communicate()
@@ -110,15 +112,15 @@ def create_commit(repository: Repository,
     @param empty: whether or not the commit is empty
     '''
     commit_name = name or 'bug_buddy_commit'
+    Git(repository.path).add('-A')
 
     # You should only create commits on the "bug_buddy" branch
-    set_bug_buddy_branch(repository)
-
-    Git(repository.path).add('-A')
 
     Git(repository.path).commit(
         '-m "{commit_name}"'.format(commit_name=commit_name),
         '--allow-empty' if allow_empty else None)
+
+    set_bug_buddy_branch(repository)
 
     commit_id = get_commit_id(repository)
     return _store_commit(repository, commit_id, commit_type)
@@ -202,13 +204,14 @@ def _apply_diff(diff: Diff, revert=False):
     '''
     Either reverts or applies a diff
     '''
+    temp_output = None
     try:
         file_name = 'bugbuddy_diff_id_{}'.format(diff.id)
         suffix = '.patch'
         temp_output = tempfile.NamedTemporaryFile(
             prefix=file_name,
             suffix=suffix,
-            dir=diff.repository.path)
+            dir=diff.commit.repository.path)
         temp_output.write(str.encode(diff.patch + '\n\n'))
         temp_output.flush()
 
@@ -216,7 +219,7 @@ def _apply_diff(diff: Diff, revert=False):
                    .format(revert='-R ' if revert else '',
                            file_path=temp_output.name))
 
-        stdout, stderr = run_cmd(diff.repository, command)
+        stdout, stderr = run_cmd(diff.commit.repository, command)
         if stderr:
             msg = ('Error trying to {revert_or_add} diff {diff} with patch:\n{patch}\n\n'
                    'stderr: {stderr}'
@@ -225,8 +228,11 @@ def _apply_diff(diff: Diff, revert=False):
                            patch=diff.patch,
                            stderr=stderr))
             raise BugBuddyError(msg)
+    except Exception as e:
+        logger.error('Hit error trying to apply diff: {}'.format(e))
     finally:
-        temp_output.close()
+        if temp_output:
+            temp_output.close()
 
 
 def git_push(repository: Repository):
@@ -403,7 +409,39 @@ def get_patches_from_diffs(repository: Repository,
     return patches
 
 
-def create_diffs(repository: Repository, commit: Commit=None) -> DiffList:
+def get_function_from_patch(repository: Repository,
+                            patch: str,
+                            file_path: str,
+                            first_line: int,
+                            last_line: int):
+    '''
+    Given a patch, find the corresponding function if possible
+    '''
+    session = Session.object_session(repository)
+    pattern = re.compile('def \w*\(')
+    matching_functions = pattern.findall(patch)
+    if len(matching_functions) != 1:
+        import pdb; pdb.set_trace()
+        print('multiple matching_functions: ', matching_functions)
+
+    else:
+        function_name = matching_functions[0]
+
+        # it comes out from the regex as def xxxxxx( so we need to splice out
+        # just the function name
+        function_name = function_name[4: -1]
+        return get(
+            session,
+            Function,
+            name=function_name,
+            file_path=file_path,
+        )
+
+
+def create_diffs(repository: Repository,
+                 commit: Commit=None,
+                 is_synthetic=False,
+                 function: Function=None) -> DiffList:
     '''
     Returns a list of diffs from a repository
     '''
@@ -416,6 +454,7 @@ def create_diffs(repository: Repository, commit: Commit=None) -> DiffList:
     patches = get_patches_from_diffs(repository, commit)
     for patch in patches:
         patch = list(whatthepatch.parse_patch(patch))[0]
+        file_path = patch.header.new_path
 
         # this only works for addition diffs
         first_line = 0
@@ -424,13 +463,27 @@ def create_diffs(repository: Repository, commit: Commit=None) -> DiffList:
                 first_line = new_line_number
                 break
 
-        diff = get_or_create_diff(
-            session=session,
-            repository=repository,
+        last_line = first_line + 1
+
+        # TODO - make sure it can get the function from the patch
+        if not function:
+            function = get_function_from_patch(
+                repository,
+                patch.text,
+                file_path,
+                first_line,
+                last_line)
+
+        diff = create(
+            session,
+            Diff,
+            commit=commit,
             first_line=first_line,
-            last_line=first_line + 1,
-            file_path=patch.header.new_path,
-            patch=patch.text)
+            last_line=last_line,
+            patch=patch.text,
+            function=function,
+            file_path=file_path,
+            is_synthetic=is_synthetic)
 
         diffs.append(diff)
 

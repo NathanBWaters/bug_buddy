@@ -6,21 +6,31 @@ import random
 from typing import List
 import sys
 
-from bug_buddy.constants import PYTHON_FILE_TYPE
+from bug_buddy.constants import PYTHON_FILE_TYPE, DEVELOPER_CHANGE
 from bug_buddy.db import create, Session, session_manager
 from bug_buddy.errors import UserError, BugBuddyError
-from bug_buddy.git_utils import create_diffs, is_repo_clean
+from bug_buddy.git_utils import create_commit, create_diffs, is_repo_clean
 from bug_buddy.logger import logger
 from bug_buddy.source import (get_functions_from_repo,
                               create_synthetic_alterations)
 from bug_buddy.schema import (Commit,
-                              DiffCommitLink,
                               Function,
                               FunctionHistory,
                               FunctionToTestLink,
                               Repository,
                               TestRun)
 from bug_buddy.schema.aliases import FunctionList, DiffList
+
+
+def snapshot(repository: Repository):
+    '''
+    Snapshots a dirty commit tree and records everything
+    '''
+    commit = create_commit(repository, commit_type=DEVELOPER_CHANGE)
+
+    snapshot_commit(repository, commit)
+
+    return commit
 
 
 def snapshot_commit(repository: Repository, commit: Commit):
@@ -39,15 +49,17 @@ def snapshot_commit(repository: Repository, commit: Commit):
     session = Session.object_session(repository)
 
     # retrieves the functions
-    functions = get_functions_from_repo(repository, commit)
-    session.add_all(functions)
+    # functions = get_functions_from_repo(repository, commit)
+    # session.add_all(functions)
 
     # create FunctionHistory instances for each Function
     diffs = create_diffs(repository, commit)
-    save_function_histories(repository, commit, functions, diffs)
+    # save_function_histories(repository, commit, functions, diffs)
 
     # save the diffs
     save_diffs(repository, commit, diffs)
+
+    session.commit()
 
 
 def snapshot_initialization(repository: Repository):
@@ -55,24 +67,12 @@ def snapshot_initialization(repository: Repository):
     Initializes the repository
     '''
     # Adds a random number of edits to the repository.
-    if not repository.diffs:
+    if not repository.commits:
         # adds 'assert False' to each function
         logger.info('Creating synthetic alterations')
         create_synthetic_alterations(repository)
     else:
         logger.info('Already initialized')
-
-
-def snapshot_diff_commit_link(commit: Commit, diff_set: DiffList):
-    '''
-    Creates the mapping between the commits and the diff_set
-    '''
-    session = Session.object_session(commit)
-    for diff in diff_set:
-        create(session,
-               DiffCommitLink,
-               commit=commit,
-               diff=diff)
 
 
 def save_function_histories(repository: Repository,

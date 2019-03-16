@@ -59,9 +59,9 @@ class Commit(Base):
         back_populates='commit',
         cascade='all, delete, delete-orphan')
 
-    # the corresponding diffs created in this commit
-    diff_links = relationship(
-        'DiffCommitLink',
+    # the corresponding functions histories created in this commit
+    diffs = relationship(
+        'Diff',
         back_populates='commit',
         cascade='all, delete, delete-orphan')
 
@@ -116,13 +116,6 @@ class Commit(Base):
                     return True
 
         return False
-
-    @property
-    def diffs(self):
-        '''
-        Returns the diffs in the commit
-        '''
-        return [diff_link.diff for diff_link in self.diff_links]
 
     @property
     def blames(self):

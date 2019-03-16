@@ -7,10 +7,14 @@ import random
 from typing import List
 import sys
 
-from bug_buddy.constants import PYTHON_FILE_TYPE
+from bug_buddy.constants import PYTHON_FILE_TYPE, MIRROR_ROOT, SYNTHETIC_CHANGE
 from bug_buddy.db import Session, get_all, create, delete
 from bug_buddy.errors import UserError, BugBuddyError
-from bug_buddy.git_utils import create_diffs, revert_diff
+from bug_buddy.git_utils import (
+    create_commit,
+    create_diffs,
+    revert_diff,
+    run_cmd)
 from bug_buddy.logger import logger
 from bug_buddy.runner import library_is_testable
 from bug_buddy.schema import Commit, Function, FunctionHistory, Repository
@@ -23,6 +27,7 @@ class RewriteFunctions(ast.NodeTransformer):
     '''
     def __init__(self,
                  repository: Repository,
+                 commit: Commit,
                  file_path: str,
                  module,
                  prepend_assert_false=True):
@@ -30,6 +35,7 @@ class RewriteFunctions(ast.NodeTransformer):
         Creates a RewriteFunctions Ast Transformer
         '''
         self.repository = repository
+        self.commit = commit
         self.prepend_assert_false = prepend_assert_false
         self.file_path = file_path
         self.module = module
@@ -63,7 +69,11 @@ class RewriteFunctions(ast.NodeTransformer):
 
         if library_is_testable(self.repository):
             # create a new diff from this one change
-            diffs = create_diffs(self.repository)
+            diffs = create_diffs(
+                self.repository,
+                commit=self.commit,
+                function=function,
+                is_synthetic=True)
             assert len(diffs) == 1
             diff = diffs[0]
             logger.info('Created diff: {}'.format(diff))
@@ -89,11 +99,18 @@ def create_synthetic_alterations(repository: Repository):
     @param repository: the code base we are changing
     @param commit: the empty commit we're adding changes to
     '''
+    # create an empty commit that the diffs will be added to
+    commit = create_commit(
+        repository,
+        name='synthetic_alterations',
+        commit_type=SYNTHETIC_CHANGE,
+        allow_empty=True)
     repo_files = repository.get_src_files(filter_file_type=PYTHON_FILE_TYPE)
 
     for file_path in repo_files:
         file_module = get_module_from_file(file_path)
         transformer = RewriteFunctions(repository=repository,
+                                       commit=commit,
                                        file_path=file_path,
                                        prepend_assert_false=True,
                                        module=file_module)
@@ -318,3 +335,18 @@ def get_function(repository: Repository,
 
     logger.info('There is a new function: {}'.format(new_function))
     return new_function
+
+
+def sync_mirror_repo(repository: Repository):
+    '''
+    Updates the mirror repository to match the code base the developer is
+    working on
+    '''
+    command = ('rsync -a {source} {destination}'
+               .format(source=repository.original_path,
+                       destination=MIRROR_ROOT))
+
+    if not os.path.exists(MIRROR_ROOT):
+        os.makedirs(MIRROR_ROOT)
+
+    run_cmd(repository, command, log=True)

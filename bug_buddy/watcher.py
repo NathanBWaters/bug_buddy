@@ -4,15 +4,18 @@ The watcher records a developer's changes
 import os
 import time
 from watchdog.observers import Observer
-from watchdog.events import LoggingEventHandler, FileSystemEventHandler
+from watchdog.events import LoggingEventHandler, PatternMatchingEventHandler
 
 from bug_buddy.constants import MIRROR_ROOT
+from bug_buddy.db import get, session_manager
 from bug_buddy.git_utils import run_cmd, is_repo_clean
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository
+from bug_buddy.snapshot import snapshot
+from bug_buddy.source import sync_mirror_repo
 
 
-class Watchdog(FileSystemEventHandler):
+class Watchdog(PatternMatchingEventHandler):
     '''
     Is notified every time an event occurs on the fileystem
     '''
@@ -21,38 +24,32 @@ class Watchdog(FileSystemEventHandler):
         Create a Watchdog instance
         '''
         super().__init__()
+
         self.repository = repository
 
     def on_any_event(self, event):
         '''
         Catches all events
         '''
+        if '/.' in event.src_path:
+            return
+
         print('{} event: {}'.format(self.repository.name, event))
-
         # make sure there is an actual change recognized by git
-        if not is_repo_clean(self.repository):
-            print('Updating the mirror repository')
-            # Copy the change over to the mirror repository
-            update_mirror_repo(self.repository)
+        if not is_repo_clean(self.repository,
+                             path=self.repository.original_path):
 
-            # make sure the repository is on the bug_buddy branch
+            # we have to recreate the repository in this thread for Sqlite
+            with session_manager() as session:
+                repository = get(session, Repository, id=self.repository.id)
+                logger.info('Updating the mirror repository')
+                # import pdb; pdb.set_trace()
+                # Copy the change over to the mirror repository
+                sync_mirror_repo(repository)
 
-            # create a snapshot of the changes
-
-
-def update_mirror_repo(repository: Repository):
-    '''
-    Updates the mirror repository to match the code base the developer is
-    working on
-    '''
-    command = ('rsync -a {source} {destination}'
-               .format(source=repository.path,
-                       destination=MIRROR_ROOT))
-
-    if not os.path.exists(MIRROR_ROOT):
-        os.makedirs(MIRROR_ROOT)
-
-    run_cmd(repository, command, log=True)
+                # make sure the repository is on the bug_buddy branch
+                commit = snapshot(repository)
+                print('Completed snapshot of {}'.format(commit))
 
 
 def watch(repository: Repository):
@@ -62,7 +59,7 @@ def watch(repository: Repository):
     '''
     event_handler = Watchdog(repository)
     observer = Observer()
-    observer.schedule(event_handler, repository.path, recursive=True)
+    observer.schedule(event_handler, repository.original_path, recursive=True)
     observer.start()
     try:
         while True:
@@ -71,5 +68,3 @@ def watch(repository: Repository):
         observer.stop()
         logger.info('Shutting down BugBuddy watcher')
     observer.join()
-
-

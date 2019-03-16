@@ -21,12 +21,10 @@ from bug_buddy.schema import (
     Repository,
     Blame,
     Diff,
-    DiffCommitLink,
     TestResult,
     TestRun,
     Commit)
 from bug_buddy.schema.aliases import DiffList
-from bug_buddy.snapshot import snapshot_commit
 
 
 def synthetic_blame_all_commits(repository: Repository):
@@ -137,9 +135,9 @@ def get_diff_set_hash(diffs: DiffList):
     '''
     Given a list of diffs, return the hash
     '''
-    diff_ids = [diff.id for diff in diffs]
-    diff_ids.sort()
-    return hash(frozenset(diff_ids))
+    diff_patches = [diff.patch for diff in diffs]
+    diff_patches.sort()
+    return hash(frozenset(diff_patches))
 
 
 def powerset(diffs):

@@ -6,7 +6,6 @@ from . base import Base
 from . blame import Blame
 from . commit import Commit
 from . diff import Diff
-from . diff_commit_link import DiffCommitLink
 from . function import Function
 from . function_history import FunctionHistory
 from . function_to_test_link import FunctionToTestLink

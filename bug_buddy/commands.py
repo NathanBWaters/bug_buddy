@@ -13,6 +13,7 @@ from bug_buddy.git_utils import (delete_bug_buddy_branch,
                                  get_repository_url_from_path,
                                  get_repository_name_from_url,
                                  is_repo_clean)
+from bug_buddy.source import sync_mirror_repo
 from bug_buddy.snapshot import snapshot_initialization
 from bug_buddy.synthetic_alterations import generate_synthetic_test_results
 from bug_buddy.watcher import watch
@@ -139,12 +140,17 @@ def _initialize_repository(session,
             src_directory=src_directory,
             src_path=src_path)
 
-    while not is_repo_clean(repository):
+    while not is_repo_clean(repository, path=repository.original_path):
         msg = ('You cannot initialize an unclean repository.  Please clean '
-               'the repository and then hit enter')
+               'the repository and then hit enter:\n')
         input(msg)
 
-    snapshot_initialization(repository)
+    # create the mirror repository that BugBuddy primarily works on
+    sync_mirror_repo(repository)
+
+    # Initialize the repository by recording functions and creating synthetic
+    # diffs
+    # snapshot_initialization(repository)
 
     session.commit()
     logger.info('Your repository "{}" has been successfully initialized!'
