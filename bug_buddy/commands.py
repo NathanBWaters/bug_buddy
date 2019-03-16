@@ -18,26 +18,26 @@ from bug_buddy.synthetic_alterations import generate_synthetic_test_results
 from bug_buddy.watcher import watch
 
 
-def train_command(path: str):
+def train_command(src_path: str):
     '''
     Trains a neural network on the available data
     '''
     with session_manager() as session:
-        repository = _get_repository_from_path(session, path)
+        repository = _get_repository_from_src_path(session, src_path)
         logger.info('Training repository: "{}"'.format(repository))
         train(repository)
 
 
-def watch_command(path: str):
+def watch_command(src_path: str):
     '''
     Watches a repository and records any changes
     '''
     with session_manager() as session:
-        repository = _get_repository_from_path(session, path)
+        repository = _get_repository_from_src_path(session, src_path)
         watch(repository)
 
 
-def initialize_command(path: str,
+def initialize_command(src_path: str,
                        initialize_commands: str=None,
                        test_commands: str=None,
                        src_directory: str=None):
@@ -46,7 +46,7 @@ def initialize_command(path: str,
     '''
     with session_manager() as session:
         _initialize_repository(session,
-                               path,
+                               src_path,
                                initialize_commands,
                                test_commands,
                                src_directory)
@@ -61,39 +61,39 @@ def analyze_command(repository_name: str):
     print('repository_name: ', repository_name)
 
 
-def generate_command(path: str, run_limit: int=None):
+def generate_command(src_path: str, run_limit: int=None):
     '''
     Entry-point for the "bugbuddy generate" command
 
-    @param path: path to the repository
+    @param src_path: path to the repository
     '''
     with session_manager() as session:
-        repository = _get_repository_from_path(session, path)
+        repository = _get_repository_from_src_path(session, src_path)
 
         logger.info('Creating synthetic results for: {}'.format(repository))
 
         generate_synthetic_test_results(repository, run_limit)
 
 
-def delete_command(path: str):
+def delete_command(src_path: str):
     '''
     Entry-point for the "bugbuddy generate" command
 
-    @param path: path to the repository
+    @param src_path: path to the repository
     '''
-    url = get_repository_url_from_path(path)
+    url = get_repository_url_from_path(src_path)
     with session_manager() as session:
         repository = get(session, Repository, url=url)
 
         msg = ('Are you sure you want to delete {}?\n'
                'This will delete the bug_buddy branch and all data associated '
                'with this project from the database.  (y/n)\n'
-               .format(path))
+               .format(src_path))
         should_delete = input(msg)
 
         if is_affirmative(should_delete):
             logger.info('Deleting bug_buddy branch')
-            delete_bug_buddy_branch(repository or Mock(path=path))
+            delete_bug_buddy_branch(repository or Mock(src_path=src_path))
 
         if repository:
             logger.info('Deleting data from the database')
@@ -104,15 +104,15 @@ def delete_command(path: str):
 
 
 def _initialize_repository(session,
-                           path: str,
+                           src_path: str,
                            initialize_commands: str=None,
                            test_commands: str=None,
                            src_directory: str=None):
     '''
-    Given a path to a repository, create the repository in the database
+    Given a src_path to a repository, create the repository in the database
     '''
-    logger.info('Initializing repository at "{}"'.format(path))
-    url = get_repository_url_from_path(path)
+    logger.info('Initializing repository at "{}"'.format(src_path))
+    url = get_repository_url_from_path(src_path)
     name = get_repository_name_from_url(url)
     logger.info('Repository name is "{}" with url "{}"'.format(name, url))
     if not initialize_commands:
@@ -137,7 +137,7 @@ def _initialize_repository(session,
             initialize_commands=initialize_commands,
             test_commands=test_commands,
             src_directory=src_directory,
-            path=path)
+            src_path=src_path)
 
     while not is_repo_clean(repository):
         msg = ('You cannot initialize an unclean repository.  Please clean '
@@ -153,19 +153,19 @@ def _initialize_repository(session,
     return repository
 
 
-def _get_repository_from_path(session, path: str):
+def _get_repository_from_src_path(session, src_path: str):
     '''
-    Returns the repository given a path
+    Returns the repository given a src_path
     '''
-    url = get_repository_url_from_path(path)
+    url = get_repository_url_from_path(src_path)
     repository = get(session, Repository, url=url)
     if not repository:
         msg = ('This repository is not in the BudBuddy database, would you '
                'like to initialize the repository?  (y/n)\n'
-               .format(path))
+               .format(src_path))
         should_initialize = input(msg)
         if is_affirmative(should_initialize):
-            repository = _initialize_repository(session, path)
+            repository = _initialize_repository(session, src_path)
         else:
             logger.info('No worries!')
 

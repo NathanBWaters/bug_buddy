@@ -8,7 +8,7 @@ from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
-from bug_buddy.constants import PYTHON_FILE_TYPE
+from bug_buddy.constants import PYTHON_FILE_TYPE, MIRROR_ROOT
 from bug_buddy.constants import FILE_TYPES
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.schema.base import Base
@@ -34,7 +34,8 @@ class Repository(Base):
     # considering it will very likely be different from machine to machine.
     # This is definitely tech debt, and the path needs to be more dynamic in the
     # future.  Or it should be saved on a per-machine basis in the database.
-    path = Column(String(500), nullable=False)
+    original_path = Column(String(500), nullable=False)
+    _mirror_path = Column('mirror_path', String(500), nullable=False)
 
     # The set of shell commands to intialize the repository
     initialize_commands = Column(String(500), nullable=False)
@@ -66,10 +67,11 @@ class Repository(Base):
     def __init__(self,
                  name: str,
                  url: str,
-                 path: str,
+                 src_path: str,
                  initialize_commands: str,
                  test_commands: str,
-                 src_directory: str):
+                 src_directory: str,
+                 mirror_path: str=None):
         '''
         Creates a new Repository instance.
         '''
@@ -77,7 +79,8 @@ class Repository(Base):
         self.url = url
         self.initialize_commands = initialize_commands
         self.test_commands = test_commands
-        self.path = os.path.abspath(path)
+        self.original_path = os.path.abspath(src_path)
+        self._mirror_path = mirror_path or self.mirror_path
         self.src_directory = src_directory
 
     @property
@@ -90,6 +93,25 @@ class Repository(Base):
         if not src_path.endswith('/'):
             src_path += '/'
         return src_path
+
+    @property
+    def mirror_path(self) -> str:
+        '''
+        Returns the path to the mirrored repository that is updated in parallel
+        to the src_path that the developer is working on
+        '''
+        mirror_path = os.path.join(MIRROR_ROOT,
+                                   self.original_path.split('/')[-1])
+        if not os.path.exists(mirror_path):
+            os.makedirs(mirror_path)
+        return mirror_path
+
+    @property
+    def path(self):
+        '''
+        Returns the path of the mirrored repository
+        '''
+        return self.mirror_path
 
     def get_src_files(self, filter_file_type=None) -> dict:
         '''

@@ -1,3 +1,8 @@
+'''
+The constants for BugBuddy
+'''
+import os
+
 
 PYTHON_FILE_TYPE = 'PTYHON'
 TMP_PATH = '/tmp/bug_buddy'
@@ -29,3 +34,10 @@ DEVELOPER_CHANGE = 'developer'
 SYNTHETIC_CHANGE = 'synthetic_alteration'
 SYNTHETIC_FIXING_CHANGE = 'synthetic_fixing'
 SYNTHETIC_RESET_CHANGE = 'synthetic_reset'
+
+
+########################################################
+#                Environment Variables                 #
+########################################################
+MIRROR_ROOT = os.getenv('BUG_BUDDY_MIRROR_ROOT',
+                        '/Users/NathanBWaters/code/.bug_buddy_mirror')

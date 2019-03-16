@@ -1,14 +1,15 @@
 '''
 The watcher records a developer's changes
 '''
-import sys
+import os
 import time
-import logging
 from watchdog.observers import Observer
 from watchdog.events import LoggingEventHandler, FileSystemEventHandler
 
-from bug_buddy.schema import Repository
+from bug_buddy.constants import MIRROR_ROOT
+from bug_buddy.git_utils import run_cmd, is_repo_clean
 from bug_buddy.logger import logger
+from bug_buddy.schema import Repository
 
 
 class Watchdog(FileSystemEventHandler):
@@ -29,9 +30,29 @@ class Watchdog(FileSystemEventHandler):
         print('{} event: {}'.format(self.repository.name, event))
 
         # make sure there is an actual change recognized by git
-        if is_repo_dirty(self.repository):
+        if not is_repo_clean(self.repository):
+            print('Updating the mirror repository')
             # Copy the change over to the mirror repository
-            
+            update_mirror_repo(self.repository)
+
+            # make sure the repository is on the bug_buddy branch
+
+            # create a snapshot of the changes
+
+
+def update_mirror_repo(repository: Repository):
+    '''
+    Updates the mirror repository to match the code base the developer is
+    working on
+    '''
+    command = ('rsync -a {source} {destination}'
+               .format(source=repository.path,
+                       destination=MIRROR_ROOT))
+
+    if not os.path.exists(MIRROR_ROOT):
+        os.makedirs(MIRROR_ROOT)
+
+    run_cmd(repository, command, log=True)
 
 
 def watch(repository: Repository):

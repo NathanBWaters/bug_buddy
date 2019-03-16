@@ -61,7 +61,7 @@ def _initialize(args):
     @param args: the argparse arguments
     '''
     commands.initialize_command(
-        path=args.path,
+        src_path=args.path,
         initialize_commands=args.initialize_commands,
         test_commands=args.test_commands,
         src_directory=args.source_directory)
