@@ -4,21 +4,27 @@ Code for interacting with the source code
 import ast
 import os
 import random
+import re
+import tempfile
+import whatthepatch
+
 from typing import List
 import sys
 
 from bug_buddy.constants import PYTHON_FILE_TYPE, MIRROR_ROOT, SYNTHETIC_CHANGE
-from bug_buddy.db import Session, get_all, create, delete
+from bug_buddy.db import Session, get_all, create, delete, get
 from bug_buddy.errors import UserError, BugBuddyError
 from bug_buddy.git_utils import (
+    clone_repository,
     create_commit,
-    create_diffs,
-    revert_diff,
+    get_most_recent_commit,
     run_cmd)
 from bug_buddy.logger import logger
 from bug_buddy.runner import library_is_testable
-from bug_buddy.schema import Commit, Function, FunctionHistory, Repository
+from bug_buddy.schema import Commit, Diff, Function, FunctionHistory, Repository
 from bug_buddy.schema.aliases import FunctionList, DiffList
+
+RANGE_INFO_REGEX = '@@ -?\d+,\d+ \+\d+,\d+ @@'
 
 
 class RewriteFunctions(ast.NodeTransformer):
@@ -117,87 +123,18 @@ def create_synthetic_alterations(repository: Repository):
         transformer.visit(file_module)
 
 
-def edit_functions(repository: Repository,
-                   message=None,
-                   get_message_func=None,
-                   num_edits=None):
-    '''
-    Alters the repository in a very simplistic manner.  For right now, we are
-    just going to take a method or function and add either an assert False or
-    assert True to it
-
-    @param repository: the code base we are changing
-    @param commit: the currently empty commit we'll be adding changes to
-    @param message: the string you want to add
-    @param get_message_func: the function to call for getting the message
-    @param num_edits: the number of edits you want to make.  Defaults to the
-                      number of functions
-    '''
-    if not message and not get_message_func:
-        raise UserError('You must either specify message or get_message_func '
-                        'for synthetic_alterations.edit_functions')
-
-    # contains the methods/functions across the files
-    uneditted_functions = get_functions_from_repo(repository)
-
-    # edit all functions with the message if not specified
-    num_edits = num_edits or len(uneditted_functions)
-
-    altered_functions = []
-
-    for i in range(num_edits):
-        function_index = random.randint(0, len(uneditted_functions) - 1)
-        selected_function = uneditted_functions[function_index]
-
-        # Debugging hackery
-        # message = 'print("{} @ {} in {}")'.format(
-        #     selected_function.node.name,
-        #     selected_function.node.lineno,
-        #     selected_function.file)
-        if get_message_func:
-            message = get_message_func(selected_function)
-
-        selected_function.prepend_statement(message)
-
-        altered_functions.append(selected_function)
-
-        # the file has been editted.  This means we need to refresh the functions
-        # with the correct line numbers.  However, we still don't want to edit
-        # the function that we just previously altered.
-        uneditted_functions = get_functions_from_repo(repository)
-
-        for altered_function in altered_functions:
-            matching_functions = [
-                function for function in uneditted_functions
-                if function.node.name == altered_function.node.name]
-
-            closest_function = matching_functions[0]
-            for matching_function in matching_functions:
-                if (abs(matching_function.node.lineno - altered_function.node.lineno) <
-                        abs(closest_function.node.lineno - altered_function.node.lineno)):
-                    # we have found a function that is more likely to correspond
-                    # with the original altered_function.
-                    closest_function = matching_function
-
-            # delete the already altered function from the list of available
-            # functions
-            uneditted_functions.remove(closest_function)
-
-
 def get_functions_from_repo(repository: Repository, commit: Commit=None):
     '''
     Returns the functions from the repository src files
     '''
     functions = []
 
-    diffs = create_diffs(repository, commit)
-
     # collect all the files
     repo_files = repository.get_src_files(filter_file_type=PYTHON_FILE_TYPE)
 
     for repo_file in repo_files:
         functions.extend(
-            get_functions_from_file(repository, repo_file, diffs, commit))
+            get_functions_from_file(repository, repo_file, commit))
 
     return functions
 
@@ -214,7 +151,7 @@ def get_module_from_file(repo_file: str):
 
 def get_functions_from_file(repository: Repository,
                             repo_file: str,
-                            diffs: DiffList,
+                            diffs: DiffList=[],
                             commit: Commit=None):
     '''
     Returns the functions from the file.  They're created in the database if
@@ -342,11 +279,197 @@ def sync_mirror_repo(repository: Repository):
     Updates the mirror repository to match the code base the developer is
     working on
     '''
-    command = ('rsync -a {source} {destination}'
-               .format(source=repository.original_path,
-                       destination=MIRROR_ROOT))
-
+    # skip the .git directory, otherwise you are overwritting the commits in
+    # the mirror repository
     if not os.path.exists(MIRROR_ROOT):
         os.makedirs(MIRROR_ROOT)
 
+    if not os.path.exists(repository.mirror_path):
+        logger.info('Initializing mirror repository')
+        clone_repository(repository, repository.mirror_path)
+
+    command = ('rsync -a {source} {destination} --exclude ".git"'
+               .format(source=repository.original_path,
+                       destination=MIRROR_ROOT))
+
     run_cmd(repository, command, log=True)
+
+
+def get_patches_from_diffs(repository: Repository,
+                           commit: Commit=None,
+                           split_per_method=True) -> List[str]:
+    '''
+    Creates a patch file containing all the diffs in the repository and then
+    returns all those patches as a list of patches
+    '''
+    import pdb; pdb.set_trace()
+
+    # this command will output the diff information into stdout
+    command = 'git --no-pager diff'
+    if commit:
+        command += ' {hash}~ {hash}'.format(hash=commit.commit_id)
+    diff_data, _ = run_cmd(repository, command)
+
+    patches = diff_data.split('diff --git ')[1:]
+    if split_per_method:
+        method_granular_patches = []
+        for patch in patches:
+            if len(re.findall(RANGE_INFO_REGEX, patch)) > 1:
+                # it looks like there were multiple edits that made it into
+                # the same hunk.  We need to split each part of the patch hunk
+                # into it's own chunk.  First step is to keep the first four
+                # lines, the header, which will become the first four lines
+                # of each sub-chunk.  For example:
+                patch_lines = patch.split('\n')
+                header = patch_lines[0:4]
+
+                starting_line = 4
+                sub_patch_lines = []
+                for i in range(4, len(patch_lines)):
+                    if (re.findall(RANGE_INFO_REGEX, patch_lines[i]) or
+                            i == len(patch_lines) - 1):
+                        if sub_patch_lines:
+                            sub_patch = '\n'.join(
+                                header + patch_lines[starting_line: i])
+                            method_granular_patches.append(sub_patch)
+
+                            # start over for the next subpatch
+                            sub_patch_lines = []
+                            starting_line = i
+
+                    sub_patch_lines.append(patch_lines[i])
+
+            else:
+                method_granular_patches.append(patch)
+        patches = method_granular_patches
+    return patches
+
+
+def get_function_from_patch(repository: Repository,
+                            patch: str,
+                            file_path: str,
+                            first_line: int,
+                            last_line: int):
+    '''
+    Given a patch, find the corresponding function if possible
+    '''
+    session = Session.object_session(repository)
+    pattern = re.compile('def \w*\(')
+    matching_functions = pattern.findall(patch)
+    if len(matching_functions) != 1:
+        import pdb; pdb.set_trace()
+        print('multiple matching_functions: ', matching_functions)
+
+    else:
+        function_name = matching_functions[0]
+
+        # it comes out from the regex as def xxxxxx( so we need to splice out
+        # just the function name
+        function_name = function_name[4: -1]
+        return get(
+            session,
+            Function,
+            name=function_name,
+            file_path=file_path,
+        )
+
+
+def create_diffs(repository: Repository,
+                 commit: Commit=None,
+                 is_synthetic=False,
+                 function: Function=None) -> DiffList:
+    '''
+    Returns a list of diffs from a repository
+    '''
+    session = Session.object_session(repository)
+    if not commit:
+        commit = get_most_recent_commit(repository)
+
+    diffs = []
+
+    patches = get_patches_from_diffs(repository, commit)
+    for patch in patches:
+        patch = list(whatthepatch.parse_patch(patch))[0]
+        file_path = patch.header.new_path
+
+        # this only works for addition diffs
+        first_line = 0
+        for old_line_number, new_line_number, line in patch.changes:
+            if not old_line_number and new_line_number:
+                first_line = new_line_number
+                break
+
+        last_line = first_line + 1
+
+        # TODO - make sure it can get the function from the patch
+        if not function:
+            function = get_function_from_patch(
+                repository,
+                patch.text,
+                file_path,
+                first_line,
+                last_line)
+
+        diff = create(
+            session,
+            Diff,
+            commit=commit,
+            first_line=first_line,
+            last_line=last_line,
+            patch=patch.text,
+            function=function,
+            file_path=file_path,
+            is_synthetic=is_synthetic)
+
+        diffs.append(diff)
+
+    return diffs
+
+
+def add_diff(diff: Diff):
+    '''
+    Adds the diff's contents to the source code
+    '''
+    _apply_diff(diff, revert=False)
+
+
+def revert_diff(diff: Diff):
+    '''
+    Reverts the diff from the source
+    '''
+    _apply_diff(diff, revert=True)
+
+
+def _apply_diff(diff: Diff, revert=False):
+    '''
+    Either reverts or applies a diff
+    '''
+    temp_output = None
+    try:
+        file_name = 'bugbuddy_diff_id_{}'.format(diff.id)
+        suffix = '.patch'
+        temp_output = tempfile.NamedTemporaryFile(
+            prefix=file_name,
+            suffix=suffix,
+            dir=diff.commit.repository.path)
+        temp_output.write(str.encode(diff.patch + '\n\n'))
+        temp_output.flush()
+
+        command = ('git apply {revert}{file_path}'
+                   .format(revert='-R ' if revert else '',
+                           file_path=temp_output.name))
+
+        stdout, stderr = run_cmd(diff.commit.repository, command)
+        if stderr:
+            msg = ('Error trying to {revert_or_add} diff {diff} with patch:\n{patch}\n\n'
+                   'stderr: {stderr}'
+                   .format(revert_or_add='revert' if revert else 'add',
+                           diff=diff,
+                           patch=diff.patch,
+                           stderr=stderr))
+            raise BugBuddyError(msg)
+    except Exception as e:
+        logger.error('Hit error trying to apply diff: {}'.format(e))
+    finally:
+        if temp_output:
+            temp_output.close()

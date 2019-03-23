@@ -9,9 +9,10 @@ import sys
 from bug_buddy.constants import PYTHON_FILE_TYPE, DEVELOPER_CHANGE
 from bug_buddy.db import create, Session, session_manager
 from bug_buddy.errors import UserError, BugBuddyError
-from bug_buddy.git_utils import create_commit, create_diffs, is_repo_clean
+from bug_buddy.git_utils import create_commit, is_repo_clean
 from bug_buddy.logger import logger
-from bug_buddy.source import (get_functions_from_repo,
+from bug_buddy.source import (create_diffs,
+                              get_functions_from_repo,
                               create_synthetic_alterations)
 from bug_buddy.schema import (Commit,
                               Function,
@@ -46,7 +47,6 @@ def snapshot_commit(repository: Repository, commit: Commit):
         - Store the diffs with their corresponding FunctionHistory
     '''
     logger.info('Snapshotting commit {}'.format(commit))
-    session = Session.object_session(repository)
 
     # retrieves the functions
     # functions = get_functions_from_repo(repository, commit)
@@ -58,8 +58,6 @@ def snapshot_commit(repository: Repository, commit: Commit):
 
     # save the diffs
     save_diffs(repository, commit, diffs)
-
-    session.commit()
 
 
 def snapshot_initialization(repository: Repository):

@@ -43,7 +43,6 @@ class Watchdog(PatternMatchingEventHandler):
             with session_manager() as session:
                 repository = get(session, Repository, id=self.repository.id)
                 logger.info('Updating the mirror repository')
-                # import pdb; pdb.set_trace()
                 # Copy the change over to the mirror repository
                 sync_mirror_repo(repository)
 
@@ -51,12 +50,15 @@ class Watchdog(PatternMatchingEventHandler):
                 commit = snapshot(repository)
                 print('Completed snapshot of {}'.format(commit))
 
+                session.commit()
+
 
 def watch(repository: Repository):
     '''
     Watches the repository's filesystem for changes and records the changes.
     It also notifies the user when there is an update in the test output.
     '''
+    logger.info('Starting BugBuddy watcher')
     event_handler = Watchdog(repository)
     observer = Observer()
     observer.schedule(event_handler, repository.original_path, recursive=True)

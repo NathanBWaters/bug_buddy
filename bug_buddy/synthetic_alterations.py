@@ -41,23 +41,25 @@ from bug_buddy.constants import (BENIGN_STATEMENT,
                                  SYNTHETIC_FIXING_CHANGE)
 from bug_buddy.db import session_manager, Session
 from bug_buddy.errors import UserError
-from bug_buddy.git_utils import (add_diff,
-                                 create_commit,
-                                 create_reset_commit,
-                                 create_diffs,
-                                 git_push,
-                                 is_repo_clean,
-                                 revert_unstaged_changes,
-                                 revert_to_master,
-                                 run_cmd,
-                                 set_bug_buddy_branch,
-                                 update_commit)
+from bug_buddy.git_utils import (
+    create_commit,
+    create_reset_commit,
+    git_push,
+    is_repo_clean,
+    revert_unstaged_changes,
+    revert_to_master,
+    run_cmd,
+    set_bug_buddy_branch,
+    update_commit)
 from bug_buddy.runner import run_test, library_is_testable
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, Function, TestRun, Commit, Diff
 from bug_buddy.snapshot import (snapshot_commit,
                                 snapshot_initialization)
-from bug_buddy.source import create_synthetic_alterations
+from bug_buddy.source import (
+    add_diff,
+    create_diffs,
+    create_synthetic_alterations)
 
 
 def yield_blame_set(repository: Repository):

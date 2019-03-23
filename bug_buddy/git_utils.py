@@ -5,11 +5,8 @@ import difflib
 from git import Repo
 from git.cmd import Git
 import os
-import re
 import subprocess
-import tempfile
 from typing import List
-import whatthepatch
 
 from bug_buddy.schema.aliases import DiffList
 from bug_buddy.constants import (
@@ -19,9 +16,6 @@ from bug_buddy.db import create, Session, get, get_or_create_diff
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
 from bug_buddy.schema import Commit, Diff, Repository, Function
-
-RANGE_INFO_REGEX = '@@ -?\d+,\d+ \+\d+,\d+ @@'
-RANGE_INFO_REGEX = '@@ -?\d+,\d+ \+\d+,\d+ @@'
 
 
 def run_cmd(repository: Repository, command: str, log=False):
@@ -186,55 +180,6 @@ def revert_unstaged_changes(repository: Repository):
     Git(repository.path).checkout('.')
 
 
-def add_diff(diff: Diff):
-    '''
-    Adds the diff's contents to the source code
-    '''
-    _apply_diff(diff, revert=False)
-
-
-def revert_diff(diff: Diff):
-    '''
-    Reverts the diff from the source
-    '''
-    _apply_diff(diff, revert=True)
-
-
-def _apply_diff(diff: Diff, revert=False):
-    '''
-    Either reverts or applies a diff
-    '''
-    temp_output = None
-    try:
-        file_name = 'bugbuddy_diff_id_{}'.format(diff.id)
-        suffix = '.patch'
-        temp_output = tempfile.NamedTemporaryFile(
-            prefix=file_name,
-            suffix=suffix,
-            dir=diff.commit.repository.path)
-        temp_output.write(str.encode(diff.patch + '\n\n'))
-        temp_output.flush()
-
-        command = ('git apply {revert}{file_path}'
-                   .format(revert='-R ' if revert else '',
-                           file_path=temp_output.name))
-
-        stdout, stderr = run_cmd(diff.commit.repository, command)
-        if stderr:
-            msg = ('Error trying to {revert_or_add} diff {diff} with patch:\n{patch}\n\n'
-                   'stderr: {stderr}'
-                   .format(revert_or_add='revert' if revert else 'add',
-                           diff=diff,
-                           patch=diff.patch,
-                           stderr=stderr))
-            raise BugBuddyError(msg)
-    except Exception as e:
-        logger.error('Hit error trying to apply diff: {}'.format(e))
-    finally:
-        if temp_output:
-            temp_output.close()
-
-
 def git_push(repository: Repository):
     '''
     Pushes the commit to the "bug_buddy" branch
@@ -363,128 +308,12 @@ def delete_bug_buddy_branch(repository):
     stdout, stderr = run_cmd(repository, command)
 
 
-def get_patches_from_diffs(repository: Repository,
-                           commit: Commit=None,
-                           split_per_method=True) -> List[str]:
+def clone_repository(repository, path):
     '''
-    Creates a patch file containing all the diffs in the repository and then
-    returns all those patches as a list of patches
+    Clones a repository
     '''
-    # this command will output the diff information into stdout
-    command = 'git --no-pager diff'
-    diff_data, _ = run_cmd(repository, command)
+    if not os.path.exists(path):
+        os.makedirs(path)
 
-    patches = diff_data.split('diff --git ')[1:]
-    if split_per_method:
-        method_granular_patches = []
-        for patch in patches:
-            if len(re.findall(RANGE_INFO_REGEX, patch)) > 1:
-                # it looks like there were multiple edits that made it into
-                # the same hunk.  We need to split each part of the patch hunk
-                # into it's own chunk.  First step is to keep the first four
-                # lines, the header, which will become the first four lines
-                # of each sub-chunk.  For example:
-                patch_lines = patch.split('\n')
-                header = patch_lines[0:4]
-
-                starting_line = 4
-                sub_patch_lines = []
-                for i in range(4, len(patch_lines)):
-                    if (re.findall(RANGE_INFO_REGEX, patch_lines[i]) or
-                            i == len(patch_lines) - 1):
-                        if sub_patch_lines:
-                            sub_patch = '\n'.join(
-                                header + patch_lines[starting_line: i])
-                            method_granular_patches.append(sub_patch)
-
-                            # start over for the next subpatch
-                            sub_patch_lines = []
-                            starting_line = i
-
-                    sub_patch_lines.append(patch_lines[i])
-
-            else:
-                method_granular_patches.append(patch)
-        patches = method_granular_patches
-    return patches
-
-
-def get_function_from_patch(repository: Repository,
-                            patch: str,
-                            file_path: str,
-                            first_line: int,
-                            last_line: int):
-    '''
-    Given a patch, find the corresponding function if possible
-    '''
-    session = Session.object_session(repository)
-    pattern = re.compile('def \w*\(')
-    matching_functions = pattern.findall(patch)
-    if len(matching_functions) != 1:
-        import pdb; pdb.set_trace()
-        print('multiple matching_functions: ', matching_functions)
-
-    else:
-        function_name = matching_functions[0]
-
-        # it comes out from the regex as def xxxxxx( so we need to splice out
-        # just the function name
-        function_name = function_name[4: -1]
-        return get(
-            session,
-            Function,
-            name=function_name,
-            file_path=file_path,
-        )
-
-
-def create_diffs(repository: Repository,
-                 commit: Commit=None,
-                 is_synthetic=False,
-                 function: Function=None) -> DiffList:
-    '''
-    Returns a list of diffs from a repository
-    '''
-    session = Session.object_session(repository)
-    if not commit:
-        commit = get_most_recent_commit(repository)
-
-    diffs = []
-
-    patches = get_patches_from_diffs(repository, commit)
-    for patch in patches:
-        patch = list(whatthepatch.parse_patch(patch))[0]
-        file_path = patch.header.new_path
-
-        # this only works for addition diffs
-        first_line = 0
-        for old_line_number, new_line_number, line in patch.changes:
-            if not old_line_number and new_line_number:
-                first_line = new_line_number
-                break
-
-        last_line = first_line + 1
-
-        # TODO - make sure it can get the function from the patch
-        if not function:
-            function = get_function_from_patch(
-                repository,
-                patch.text,
-                file_path,
-                first_line,
-                last_line)
-
-        diff = create(
-            session,
-            Diff,
-            commit=commit,
-            first_line=first_line,
-            last_line=last_line,
-            patch=patch.text,
-            function=function,
-            file_path=file_path,
-            is_synthetic=is_synthetic)
-
-        diffs.append(diff)
-
-    return diffs
+    command = 'git clone {url} {path}'.format(url=repository.url, path=path)
+    run_cmd(repository, command)

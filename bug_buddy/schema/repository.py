@@ -96,11 +96,7 @@ class Repository(Base):
         Returns the path to the mirrored repository that is updated in parallel
         to the src_path that the developer is working on
         '''
-        mirror_path = os.path.join(MIRROR_ROOT,
-                                   self.original_path.split('/')[-1])
-        if not os.path.exists(mirror_path):
-            os.makedirs(mirror_path)
-        return mirror_path
+        return os.path.join(MIRROR_ROOT, self.original_path.split('/')[-1])
 
     @property
     def path(self):
