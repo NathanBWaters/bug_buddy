@@ -45,6 +45,13 @@ class FunctionHistory(Base):
         back_populates='function_history',
         cascade='all, delete, delete-orphan')
 
+    @property
+    def name(self):
+        '''
+        Return the name of the corresponding function
+        '''
+        return self.function.name
+
     def __init__(self,
                  function: Function,
                  commit: Commit,

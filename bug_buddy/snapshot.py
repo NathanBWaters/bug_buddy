@@ -5,7 +5,9 @@ from collections import defaultdict
 import difflib
 import os
 import random
+import traceback
 from typing import List
+from sqlalchemy.orm.exc import NoResultFound
 import sys
 
 from bug_buddy.constants import PYTHON_FILE_TYPE, DEVELOPER_CHANGE
@@ -13,7 +15,9 @@ from bug_buddy.db import create, Session, session_manager
 from bug_buddy.errors import UserError, BugBuddyError
 from bug_buddy.git_utils import (
     create_commit,
+    git_push,
     get_previous_commit,
+    revert_to_master,
     is_repo_clean)
 from bug_buddy.logger import logger
 from bug_buddy.source import (
@@ -39,11 +43,23 @@ def snapshot(repository: Repository):
     '''
     Snapshots a dirty commit tree and records everything
     '''
-    commit = create_commit(repository, commit_type=DEVELOPER_CHANGE)
+    try:
+        commit = create_commit(repository, commit_type=DEVELOPER_CHANGE)
 
-    snapshot_commit(repository, commit)
+        snapshot_commit(repository, commit)
 
-    return commit
+        git_push(repository)
+
+        return commit
+
+    except Exception as e:
+        traceback.print_exc()
+        import pdb; pdb.set_trace()
+        # revert all the local edits
+        logger.error('Hit the following exception: {}'.format(e))
+        logger.error('Reverting local changes')
+        revert_to_master(repository)
+        raise e
 
 
 def snapshot_commit(repository: Repository, commit: Commit):
@@ -89,6 +105,8 @@ def save_function_histories(repository: Repository,
 
     if not previous_commit:
         logger.info('No previous commit, creating new function nodes')
+        import pdb; pdb.set_trace()
+        previous_commit = get_previous_commit(commit)
         create_new_functions_from_nodes(commit, function_nodes)
         return
 
@@ -108,19 +126,19 @@ def save_function_histories(repository: Repository,
     # function history and recreate it for this commit without even finding
     # the appropriate function
     for function_node in unaltered_function_nodes:
-        previous_function_history = (
-            session.query(FunctionHistory)
-                   .join(FunctionHistory.function)
-                   .filter(FunctionHistory.commit_id == previous_commit.id)
-                   .filter(Function.name == function_node.name)
-                   .filter(Function.file_path == function_node.file_path)
-                   .filter(FunctionHistory.first_line == function_node.lineno)
-        ).one()
-
-        if not previous_function_history:
+        try:
+            previous_function_history = (
+                session.query(FunctionHistory)
+                       .join(FunctionHistory.function)
+                       .filter(FunctionHistory.commit_id == previous_commit.id)
+                       .filter(Function.name == function_node.name)
+                       .filter(Function.file_path == function_node.file_path)
+                       .filter(FunctionHistory.first_line == function_node.lineno)
+            ).one()
+        except NoResultFound:
+            import pdb; pdb.set_trace()
             logger.error('Unable to find previous function history for node {}'
                          'which was in an unaltered file')
-            import pdb; pdb.set_trace()
 
         function_history = create(
             session,
@@ -169,28 +187,33 @@ def _save_altered_file_function_history(commit: Commit,
         # get the function nodes present in the specified file
         file_current_function_nodes = [
             function_node for function_node in altered_function_nodes
-            if function_node.path == altered_file]
+            if function_node.file_path == altered_file]
 
         # get the previous commit's version of the file's function histories
         # in order by their first line
         file_previous_function_histories = [
             function_history for function_history
-            in previous_commit.function_history
+            in previous_commit.function_histories
             if function_history.function.file_path == altered_file]
 
         # combine the file's current nodes and previous histories into a
         # dictionary with key being their names
         function_name_map = {}
-        for func in [file_current_function_nodes + file_previous_function_histories]:
-            func_type = (PREVIOUS_HISTORY if isinstance(func, FunctionHistory)
-                         else CURRENT_NODE)
-            if function_name_map.get(func.name):
-                function_name_map[func.name][func_type].append(func)
-            else:
-                function_name_map[func.name] = defaultdict[list]
-                function_name_map[func.name][func_type].append(func)
+        for func in (file_current_function_nodes + file_previous_function_histories):
+            try:
+                func_type = (PREVIOUS_HISTORY if isinstance(func, FunctionHistory)
+                             else CURRENT_NODE)
+                if function_name_map.get(func.name):
+                    function_name_map[func.name][func_type].append(func)
+                else:
+                    function_name_map[func.name] = defaultdict(list)
+                    function_name_map[func.name][func_type].append(func)
+            except (AttributeError, TypeError) as e:
+                print(e)
+                import pdb; pdb.set_trace()
+                print('Hit a random attribute error')
 
-        for func_name, corresponding_functions in function_name_map.iteritems():
+        for func_name, corresponding_functions in function_name_map.items():
             previous_histories = corresponding_functions[PREVIOUS_HISTORY]
             current_nodes = corresponding_functions[CURRENT_NODE]
 

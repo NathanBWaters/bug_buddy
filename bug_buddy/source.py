@@ -54,7 +54,7 @@ class AstTreeWalker(ast.NodeTransformer):
         Is called when the transformer hits a function node
         '''
         # Add extra attributes to the node
-        node.file_path = self.file_path
+        node.file_path = os.path.relpath(self.file_path, self.repository.path)
         node.first_line = node.lineno
         node.last_line = node.body[-1].lineno
         node.source_code = astor.to_source(node)
@@ -73,13 +73,11 @@ class AstTreeWalker(ast.NodeTransformer):
             return create_synthetic_diff_for_node(
                 self.repository,
                 self.commit,
-                self.file_path,
                 node)
 
 
 def create_synthetic_diff_for_node(repository: Repository,
                                    commit: Commit,
-                                   file_path: str,
                                    node):
     '''
     Creates the visited function and adds an 'assert False' to the node.
@@ -93,7 +91,7 @@ def create_synthetic_diff_for_node(repository: Repository,
         Function,
         repository=repository,
         node=node,
-        file_path=file_path)
+        file_path=node.file_path)
 
     # create the function history instance
     create(
