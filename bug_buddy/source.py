@@ -2,6 +2,7 @@
 Code for interacting with the source code
 '''
 import ast
+import astor
 import os
 import random
 import re
@@ -27,73 +28,113 @@ from bug_buddy.schema.aliases import FunctionList, DiffList
 RANGE_INFO_REGEX = '@@ -?\d+,\d+ \+\d+,\d+ @@'
 
 
-class RewriteFunctions(ast.NodeTransformer):
+class AstTreeWalker(ast.NodeTransformer):
     '''
-    Used for transforming a repository
+    Used for walking the AST tree for a repository
     '''
     def __init__(self,
                  repository: Repository,
-                 commit: Commit,
                  file_path: str,
-                 module,
-                 prepend_assert_false=True):
+                 commit: Commit=None,
+                 prepend_assert_false=False):
         '''
-        Creates a RewriteFunctions Ast Transformer
+        Creates a AstTreeWalker Ast Transformer
         '''
         self.repository = repository
         self.commit = commit
         self.prepend_assert_false = prepend_assert_false
         self.file_path = file_path
-        self.module = module
         self.num_edits = 0
+
+        # stores teh FunctionDef ast nodes
+        self.function_nodes = []
 
     def visit_FunctionDef(self, node):
         '''
         Is called when the transformer hits a function node
         '''
+        # Add extra attributes to the node
+        node.file_path = self.file_path
+        node.first_line = node.lineno
+        node.last_line = node.body[-1].lineno
+        node.source_code = astor.to_source(node)
+
+        # store the function that was visited
+        self.function_nodes.append(node)
+
+        # if we want to prepend an 'assert False' statement and create a diff
+        # with a patch out of the action
         if self.prepend_assert_false:
-            self._prepend_assert_false(node)
+            if not self.commit:
+                msg = ('You must provide the commit in order to create '
+                       'synthetic diffs')
+                raise BugBuddyError(msg)
 
-    def _prepend_assert_false(self, node):
-        '''
-        Adds an 'assert False' to the node
-        '''
-        session = Session.object_session(self.repository)
-        # There are no perfectly matching fucntions so we therefore will return
-        # a new Function instance. We do not store the function at this point
-        function = create(
-            session,
-            Function,
-            repository=self.repository,
-            node=node,
-            file_path=self.file_path)
-
-        logger.info('There is a new function: {}'.format(function))
-
-        added_line = function.prepend_statement('assert False',
-                                                offset=self.num_edits)
-
-        if library_is_testable(self.repository):
-            # create a new diff from this one change
-            diffs = create_diffs(
+            return create_synthetic_diff_for_node(
                 self.repository,
-                commit=self.commit,
-                function=function,
-                is_synthetic=True)
-            assert len(diffs) == 1
-            diff = diffs[0]
-            logger.info('Created diff: {}'.format(diff))
+                self.commit,
+                self.file_path,
+                node)
 
-            # this is the function's synthetic diff
-            function.synthetic_diff = diff
 
-            # go back to a clean repository
-            revert_diff(diff)
+def create_synthetic_diff_for_node(repository: Repository,
+                                   commit: Commit,
+                                   file_path: str,
+                                   node):
+    '''
+    Creates the visited function and adds an 'assert False' to the node.
+    This is used for creating synthetic 'assert False' diffs for each function.
+    '''
+    session = Session.object_session(repository)
 
-        else:
-            # remove the addition from the source code
-            function.remove_line(added_line)
-        return node
+    # create the function instance
+    function = create(
+        session,
+        Function,
+        repository=repository,
+        node=node,
+        file_path=file_path)
+
+    # create the function history instance
+    create(
+        session,
+        FunctionHistory,
+        function=function,
+        commit=commit,
+        node=node,
+        first_line=function.first_line,
+        # we need the minus 1 because when we complete the commit the
+        # 'assert False' line will have been removed
+        last_line=function.last_line - 1,
+        altered=True,
+    )
+
+    logger.info('There is a new function: {}'.format(function))
+
+    added_line = function.prepend_statement('assert False')
+
+    if library_is_testable(repository):
+        # create a new diff from this one change
+        diffs = create_diffs(
+            repository,
+            commit=commit,
+            function=function,
+            is_synthetic=True)
+        assert len(diffs) == 1
+        diff = diffs[0]
+        logger.info('Created diff: {}'.format(diff))
+
+        # this is the function's synthetic diff
+        function.synthetic_diff = diff
+
+        # go back to a clean repository
+        revert_diff(diff)
+
+    else:
+        # remove the addition from the source code
+        function.remove_line(added_line)
+
+    return node
 
 
 def create_synthetic_alterations(repository: Repository):
@@ -115,28 +156,29 @@ def create_synthetic_alterations(repository: Repository):
 
     for file_path in repo_files:
         file_module = get_module_from_file(file_path)
-        transformer = RewriteFunctions(repository=repository,
-                                       commit=commit,
-                                       file_path=file_path,
-                                       prepend_assert_false=True,
-                                       module=file_module)
+        transformer = AstTreeWalker(repository=repository,
+                                    commit=commit,
+                                    file_path=file_path,
+                                    prepend_assert_false=True)
         transformer.visit(file_module)
 
 
-def get_functions_from_repo(repository: Repository, commit: Commit=None):
+def get_function_nodes_from_repo(repository: Repository):
     '''
-    Returns the functions from the repository src files
+    Returns the AST FunctionDef nodes from the repository src files
     '''
-    functions = []
-
     # collect all the files
     repo_files = repository.get_src_files(filter_file_type=PYTHON_FILE_TYPE)
 
+    function_nodes = []
     for repo_file in repo_files:
-        functions.extend(
-            get_functions_from_file(repository, repo_file, commit))
+        file_module = get_module_from_file(repo_file)
+        transformer = AstTreeWalker(repository=repository,
+                                    file_path=repo_file)
+        transformer.visit(file_module)
+        function_nodes.extend(transformer.function_nodes)
 
-    return functions
+    return function_nodes
 
 
 def get_module_from_file(repo_file: str):
@@ -147,36 +189,6 @@ def get_module_from_file(repo_file: str):
         repo_file_content = file.read()
         repo_module = ast.parse(repo_file_content)
         return repo_module
-
-
-def get_functions_from_file(repository: Repository,
-                            repo_file: str,
-                            diffs: DiffList=[],
-                            commit: Commit=None):
-    '''
-    Returns the functions from the file.  They're created in the database if
-    do not already exist
-    '''
-    functions = []
-
-    repo_module = get_module_from_file(repo_file)
-    for node in ast.walk(repo_module):
-        if isinstance(node, ast.FunctionDef):
-            relative_file_path = os.path.relpath(repo_file, repository.path)
-            logger.info('Currently have node "{}" at path "{}@{}"'
-                        .format(node.name, relative_file_path, node.lineno))
-            function = get_function(
-                repository=repository,
-                node=node,
-                file_path=relative_file_path,
-                diffs=diffs,
-                commit=commit,
-            )
-            logger.info('Got function {}'.format(function))
-
-            functions.append(function)
-
-    return functions
 
 
 def get_function(repository: Repository,
@@ -295,15 +307,13 @@ def sync_mirror_repo(repository: Repository):
     run_cmd(repository, command, log=True)
 
 
-def get_patches_from_diffs(repository: Repository,
-                           commit: Commit=None,
-                           split_per_method=True) -> List[str]:
+def get_diff_patches(repository: Repository,
+                     commit: Commit=None,
+                     split_per_method=True) -> List[str]:
     '''
     Creates a patch file containing all the diffs in the repository and then
     returns all those patches as a list of patches
     '''
-    import pdb; pdb.set_trace()
-
     # this command will output the diff information into stdout
     command = 'git --no-pager diff'
     if commit:
@@ -342,7 +352,9 @@ def get_patches_from_diffs(repository: Repository,
             else:
                 method_granular_patches.append(patch)
         patches = method_granular_patches
-    return patches
+
+    # covert the list of patches into whatthepatch patch objects
+    return [list(whatthepatch.parse_patch(patch))[0] for patch in patches]
 
 
 def get_function_from_patch(repository: Repository,
@@ -357,7 +369,7 @@ def get_function_from_patch(repository: Repository,
     pattern = re.compile('def \w*\(')
     matching_functions = pattern.findall(patch)
     if len(matching_functions) != 1:
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         print('multiple matching_functions: ', matching_functions)
 
     else:
@@ -387,9 +399,8 @@ def create_diffs(repository: Repository,
 
     diffs = []
 
-    patches = get_patches_from_diffs(repository, commit)
+    patches = get_diff_patches(repository, commit)
     for patch in patches:
-        patch = list(whatthepatch.parse_patch(patch))[0]
         file_path = patch.header.new_path
 
         # this only works for addition diffs
@@ -426,7 +437,7 @@ def create_diffs(repository: Repository,
     return diffs
 
 
-def add_diff(diff: Diff):
+def apply_diff(diff: Diff):
     '''
     Adds the diff's contents to the source code
     '''

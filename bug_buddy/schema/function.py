@@ -25,10 +25,6 @@ class Function(Base):
     # the content of the function
     name = Column(String(500), nullable=False)
 
-    # the function signature.  Much more descriptive than the name of the
-    # function which can commonly be overloaded
-    signature = Column(String(500), nullable=False)
-
     # relative path to file from the root of the repository
     file_path = Column(String(500), nullable=False)
 
@@ -50,8 +46,7 @@ class Function(Base):
                  repository,  # Repository - need to figure out typing for
                               # in cases where they both refer to each other
                  node: ast.AST,
-                 file_path: str,
-                 signature: str=None):
+                 file_path: str):
         '''
         Creates a new Function instance.
         '''
@@ -59,7 +54,6 @@ class Function(Base):
         self.node = node
         self.name = node.name
         self.file_path = file_path
-        self.signature = signature or get_signature_from_node(node)
 
     @property
     def ast_node(self):
@@ -105,11 +99,6 @@ class Function(Base):
             return self.latest_history.first_line
 
         return -1
-
-    def update_given_diff(self):
-        '''
-        Given a diff, it will update it's internal structures accordingly
-        '''
 
     @property
     def last_line(self):
@@ -199,36 +188,3 @@ class Function(Base):
                         file=self.file_path,
                         first_line=self.first_line,
                         last_line=self.last_line))
-
-
-def get_signature_from_node(node):
-    '''
-    Returns the function signature from a node
-    '''
-    try:
-        args = []
-        if node.args.args:
-            [args.append([a.col_offset, a.arg]) for a in node.args.args]
-        if node.args.defaults:
-            # import pdb; pdb.set_trace()
-            [args.append([a.col_offset, '=' + a.arg])
-             for a in node.args.defaults if hasattr(a, 'arg')]
-        sorted_args = sorted(args)
-        for i, p in enumerate(sorted_args):
-            if p[1].startswith('='):
-                sorted_args[i - 1][1] += p[1]
-        sorted_args = [k[1] for k in sorted_args if not k[1].startswith('=')]
-
-        if node.args.vararg:
-            sorted_args.append('*' + node.args.vararg)
-        if node.args.kwarg:
-            sorted_args.append('**' + node.args.kwarg)
-
-        signature = '(' + ', '.join(sorted_args) + ')'
-        signature = node.name + signature
-        logger.info('signature: {}'.format(signature))
-        return signature
-    except Exception as e:
-        logger.error('Hit error getting signature from the node: {}'.format(e))
-        import pdb; pdb.set_trace()
-

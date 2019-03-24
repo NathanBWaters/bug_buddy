@@ -6,7 +6,8 @@ NOT CURRENTLY USED
 '''
 import ast
 import astor
-from sqlalchemy import Column, ForeignKey, Integer, Boolean
+import pickle
+from sqlalchemy import Column, ForeignKey, Integer, Boolean, String
 from sqlalchemy.orm import relationship
 
 from bug_buddy.errors import BugBuddyError
@@ -30,6 +31,9 @@ class FunctionHistory(Base):
     # whether or not the function was altered in the commit
     altered = Column(Boolean, nullable=False)
 
+    # a serialized or 'pickled' form of the AST node
+    source_code = Column(String, nullable=False)
+
     function_id = Column(Integer, ForeignKey('function.id'))
     function = relationship('Function', back_populates='function_history')
 
@@ -44,6 +48,7 @@ class FunctionHistory(Base):
     def __init__(self,
                  function: Function,
                  commit: Commit,
+                 node,
                  first_line: int,
                  last_line: int,
                  altered: bool):
@@ -52,6 +57,7 @@ class FunctionHistory(Base):
         '''
         self.function = function
         self.commit = commit
+        self.source_code = astor.to_source(node)
         self.first_line = first_line
         self.last_line = last_line
         self.altered = altered
@@ -60,6 +66,6 @@ class FunctionHistory(Base):
         '''
         Converts the FunctionHistory into a string
         '''
-        return ('<FunctionHistory {name} | {file} />'
+        return ('<FunctionHistory {name} | {commit} />'
                 .format(name=self.function.name,
                         commit=self.commit.commit_id))

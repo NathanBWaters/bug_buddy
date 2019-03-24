@@ -54,10 +54,9 @@ from bug_buddy.git_utils import (
 from bug_buddy.runner import run_test, library_is_testable
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository, Function, TestRun, Commit, Diff
-from bug_buddy.snapshot import (snapshot_commit,
-                                snapshot_initialization)
+from bug_buddy.snapshot import snapshot_commit
 from bug_buddy.source import (
-    add_diff,
+    apply_diff,
     create_diffs,
     create_synthetic_alterations)
 
@@ -87,7 +86,6 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
     Creates multiple synthetic changes and test results
     '''
     session = Session.object_session(repository)
-    # snapshot_initialization(repository)
 
     num_runs = 0
     for diff_set in yield_blame_set(repository):
@@ -118,7 +116,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                                            allow_empty=True)
                     # apply the synthetic diffs
                     for diff in diff_subset:
-                        add_diff(diff)
+                        apply_diff(diff)
 
                     # save the diffs with the commit
                     # TODO - need to recreate the diffs but now they're tied to

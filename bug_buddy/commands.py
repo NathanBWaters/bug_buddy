@@ -13,8 +13,8 @@ from bug_buddy.git_utils import (delete_bug_buddy_branch,
                                  get_repository_url_from_path,
                                  get_repository_name_from_url,
                                  is_repo_clean)
-from bug_buddy.source import sync_mirror_repo
-from bug_buddy.snapshot import snapshot_initialization
+from bug_buddy.source import sync_mirror_repo, create_synthetic_alterations
+from bug_buddy.snapshot import snapshot
 from bug_buddy.synthetic_alterations import generate_synthetic_test_results
 from bug_buddy.watcher import watch
 
@@ -150,7 +150,9 @@ def _initialize_repository(session,
 
     # Initialize the repository by recording functions and creating synthetic
     # diffs
-    # snapshot_initialization(repository)
+    snapshot(repository)
+
+    # create_synthetic_alterations(repository)
 
     session.commit()
     logger.info('Your repository "{}" has been successfully initialized!'

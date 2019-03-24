@@ -253,6 +253,23 @@ def get_commits_only_in_branch(repository, branch='origin/bug_buddy') -> List[st
     return stdout.split('\n')
 
 
+def get_previous_commit(commit: Commit):
+    '''
+    Returns the commit id created right before the provided commit
+    '''
+    previous_commit_id = get_previous_commit_id(commit)
+    return get(Session.object_session(commit), Commit, commit_id=previous_commit_id)
+
+
+def get_previous_commit_id(commit: Commit):
+    '''
+    Returns the commit id created right before the provided commit
+    '''
+    command = 'git show --q --format="%H" {}^1'.format(commit.commit_id)
+    stdout, stderr = run_cmd(commit.repository, command)
+    return stdout.split('\n')[0]
+
+
 def revert_to_master(repository: Repository):
     '''
     Creates a new commit which contains the same content as a fresh branch
