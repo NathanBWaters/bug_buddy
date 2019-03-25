@@ -17,16 +17,18 @@ from bug_buddy.git_utils import (
     create_commit,
     git_push,
     get_previous_commit,
-    revert_to_master,
+    get_most_recent_commit,
+    revert_commit,
     is_repo_clean)
 from bug_buddy.logger import logger
 from bug_buddy.source import (
-    create_diffs,
-    create_synthetic_alterations,
     get_diff_patches,
-    get_function_nodes_from_repo)
+    get_range_of_patch,
+    get_function_nodes_from_repo,
+    get_function_from_patch)
 from bug_buddy.schema import (
     Commit,
+    Diff,
     Function,
     FunctionHistory,
     FunctionToTestLink,
@@ -43,13 +45,17 @@ def snapshot(repository: Repository):
     '''
     Snapshots a dirty commit tree and records everything
     '''
+    commit = None
     try:
+        session = Session.object_session(repository)
+
         commit = create_commit(repository, commit_type=DEVELOPER_CHANGE)
 
         snapshot_commit(repository, commit)
 
         git_push(repository)
 
+        session.commit()
         return commit
 
     except Exception as e:
@@ -57,8 +63,11 @@ def snapshot(repository: Repository):
         import pdb; pdb.set_trace()
         # revert all the local edits
         logger.error('Hit the following exception: {}'.format(e))
-        logger.error('Reverting local changes')
-        revert_to_master(repository)
+
+        if commit:
+            logger.error('Reverting local changes')
+            revert_commit(repository, commit)
+
         raise e
 
 
@@ -81,11 +90,12 @@ def snapshot_commit(repository: Repository, commit: Commit):
 
     # retrieve the patches from the repository in the form of whatthepatch
     # patch objects
-    patches = get_diff_patches(repository, commit)
+    patches = get_diff_patches(commit)
 
     # create FunctionHistory instances for each Function
     save_function_histories(repository, commit, function_nodes, patches)
 
+    # create Diff instances
     diffs = create_diffs(repository, commit)
 
     # save the diffs
@@ -105,8 +115,6 @@ def save_function_histories(repository: Repository,
 
     if not previous_commit:
         logger.info('No previous commit, creating new function nodes')
-        import pdb; pdb.set_trace()
-        previous_commit = get_previous_commit(commit)
         create_new_functions_from_nodes(commit, function_nodes)
         return
 
@@ -200,18 +208,13 @@ def _save_altered_file_function_history(commit: Commit,
         # dictionary with key being their names
         function_name_map = {}
         for func in (file_current_function_nodes + file_previous_function_histories):
-            try:
-                func_type = (PREVIOUS_HISTORY if isinstance(func, FunctionHistory)
-                             else CURRENT_NODE)
-                if function_name_map.get(func.name):
-                    function_name_map[func.name][func_type].append(func)
-                else:
-                    function_name_map[func.name] = defaultdict(list)
-                    function_name_map[func.name][func_type].append(func)
-            except (AttributeError, TypeError) as e:
-                print(e)
-                import pdb; pdb.set_trace()
-                print('Hit a random attribute error')
+            func_type = (PREVIOUS_HISTORY if isinstance(func, FunctionHistory)
+                         else CURRENT_NODE)
+            if function_name_map.get(func.name):
+                function_name_map[func.name][func_type].append(func)
+            else:
+                function_name_map[func.name] = defaultdict(list)
+                function_name_map[func.name][func_type].append(func)
 
         for func_name, corresponding_functions in function_name_map.items():
             previous_histories = corresponding_functions[PREVIOUS_HISTORY]
@@ -308,3 +311,48 @@ def save_diffs(repository: Repository,
         diff.commit = commit
 
     session.add_all(diffs)
+
+
+def create_diffs(repository: Repository,
+                 commit: Commit=None,
+                 is_synthetic=False,
+                 function: Function=None) -> DiffList:
+    '''
+    Returns a list of diffs from a repository
+    '''
+    session = Session.object_session(repository)
+    if not commit:
+        commit = get_most_recent_commit(repository)
+
+    diffs = []
+
+    # the patches should be split on a per function basis
+    patches = get_diff_patches(commit)
+
+    for patch in patches:
+        file_path = patch.header.new_path
+        first_line, last_line = get_range_of_patch(patch)
+
+        if not function:
+            # import pdb; pdb.set_trace()
+            function_history = commit.get_corresponding_function(
+                file_path=file_path,
+                start_range=first_line,
+                end_range=last_line,
+            )
+            function = function_history.function if function_history else None
+
+        diff = create(
+            session,
+            Diff,
+            commit=commit,
+            patch=patch.text,
+            function=function,
+            file_path=file_path,
+            is_synthetic=is_synthetic,
+            first_line=first_line,
+            last_line=last_line)
+
+        diffs.append(diff)
+
+    return diffs

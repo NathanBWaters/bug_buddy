@@ -25,8 +25,6 @@ from bug_buddy.runner import library_is_testable
 from bug_buddy.schema import Commit, Diff, Function, FunctionHistory, Repository
 from bug_buddy.schema.aliases import FunctionList, DiffList
 
-RANGE_INFO_REGEX = '@@ -?\d+,\d+ \+\d+,\d+ @@'
-
 
 class AstTreeWalker(ast.NodeTransformer):
     '''
@@ -62,104 +60,6 @@ class AstTreeWalker(ast.NodeTransformer):
         # store the function that was visited
         self.function_nodes.append(node)
 
-        # if we want to prepend an 'assert False' statement and create a diff
-        # with a patch out of the action
-        if self.prepend_assert_false:
-            if not self.commit:
-                msg = ('You must provide the commit in order to create '
-                       'synthetic diffs')
-                raise BugBuddyError(msg)
-
-            return create_synthetic_diff_for_node(
-                self.repository,
-                self.commit,
-                node)
-
-
-def create_synthetic_diff_for_node(repository: Repository,
-                                   commit: Commit,
-                                   node):
-    '''
-    Creates the visited function and adds an 'assert False' to the node.
-    This is used for creating synthetic 'assert False' diffs for each function.
-    '''
-    session = Session.object_session(repository)
-
-    # create the function instance
-    function = create(
-        session,
-        Function,
-        repository=repository,
-        node=node,
-        file_path=node.file_path)
-
-    # create the function history instance
-    create(
-        session,
-        FunctionHistory,
-        function=function,
-        commit=commit,
-        node=node,
-        first_line=function.first_line,
-        # we need the minus 1 because when we complete the commit the
-        # 'assert False' line will have been removed
-        last_line=function.last_line - 1,
-        altered=True,
-    )
-
-    logger.info('There is a new function: {}'.format(function))
-
-    added_line = function.prepend_statement('assert False')
-
-    if library_is_testable(repository):
-        # create a new diff from this one change
-        diffs = create_diffs(
-            repository,
-            commit=commit,
-            function=function,
-            is_synthetic=True)
-        assert len(diffs) == 1
-        diff = diffs[0]
-        logger.info('Created diff: {}'.format(diff))
-
-        # this is the function's synthetic diff
-        function.synthetic_diff = diff
-
-        # go back to a clean repository
-        revert_diff(diff)
-
-    else:
-        # remove the addition from the source code
-        function.remove_line(added_line)
-
-    return node
-
-
-def create_synthetic_alterations(repository: Repository):
-    '''
-    Creates synthetic changes to a code base, creates a commit, and then runs
-    the tests to see how the changes impacted the test results.  These changes
-    are either 'assert False' or 'assert True'.
-
-    @param repository: the code base we are changing
-    @param commit: the empty commit we're adding changes to
-    '''
-    # create an empty commit that the diffs will be added to
-    commit = create_commit(
-        repository,
-        name='synthetic_alterations',
-        commit_type=SYNTHETIC_CHANGE,
-        allow_empty=True)
-    repo_files = repository.get_src_files(filter_file_type=PYTHON_FILE_TYPE)
-
-    for file_path in repo_files:
-        file_module = get_module_from_file(file_path)
-        transformer = AstTreeWalker(repository=repository,
-                                    commit=commit,
-                                    file_path=file_path,
-                                    prepend_assert_false=True)
-        transformer.visit(file_module)
-
 
 def get_function_nodes_from_repo(repository: Repository):
     '''
@@ -189,101 +89,6 @@ def get_module_from_file(repo_file: str):
         return repo_module
 
 
-def get_function(repository: Repository,
-                 node,
-                 file_path: str,
-                 commit: Commit=None,
-                 diffs: DiffList=[],
-                 ):
-    '''
-    Given a function's ast node information, return a corresponding Function.
-    If it already exists in the database, use that one.  Otherwise make a new
-    instance but do not save it in the DB. We make sure the function in the
-    database and the AST node are the same by tracking line numbers in the
-    database and looking at the diff.
-
-    For example:
-        - If the file was not editted and the node's line number is the same
-          as the Function's latest FunctionHistory line number, then we have
-          found the corresponding Function instance for the node
-        - If the file was editted, we need to see how many lines were added or
-          subtracted above the Function's latest FunctionHistory line number.
-
-        - Since we just retrieved the node from the source code, the node has
-          each Function's current line number, which we will store as the
-          FunctionHistory line_number
-
-    @param repository: the Repository instance we are getting a function from
-    @node: the corresponding AST Function node
-    @file_path: the relative file path of the function
-    @commit (optional): the commit this function is a part of.  Necessary for
-                        if we need the diff
-    '''
-    session = Session.object_session(repository)
-
-    potential_matching_functions = get_all(
-        session,
-        Function,
-        repository=repository,
-        name=node.name,
-        file_path=file_path)
-
-    # we have found a possible matching function.  We now need to make sure
-    # that we have the correct matching function by comparing the line numbers
-    if potential_matching_functions:
-        if not diffs:
-            diffs = create_diffs(repository, commit)
-
-        # We have at least one matching function, now we make sure it's the
-        # exact corresponding function but making sure the lines are the same.
-
-        # First, we check to see if there are any diffs in the file that would
-        # influence the location of this function. If there are not, then the
-        # AST Function node should have the exact same line number as the
-        # matching function's latest FunctionHistory.line_number.
-        affecting_diffs = [
-            diff for diff in diffs if file_path == diff.file_path and
-            diff.first_line <= node.lineno
-        ]
-
-        diff_impact = 0
-        if affecting_diffs:
-            # The file was altered, so we now need to know how many lines were
-            # added or subtracted above the function.
-            diff_impact = sum([diff.size_difference for diff in affecting_diffs])
-            logger.debug('The following diffs are adding "{}" lines: {}'
-                         .format(diff_impact, diffs))
-
-        for function in potential_matching_functions:
-            # if the function does not have node history, then that means it
-            # is a new function that has not gone through the snapshot process
-            if not function.function_history:
-                continue
-
-            if node.lineno == function.latest_history.first_line + diff_impact:
-                function.node = node
-                logger.debug('We found the corresponding Function instance: {}'
-                             .format(function))
-                return function
-
-        logger.info('The following potential_matching_functions did not match  '
-                    'the node line number "{lineno}": {functions}'
-                    .format(lineno=node.lineno,
-                            functions=potential_matching_functions))
-
-    # There are no perfectly matching fucntions so we therefore will return
-    # a new Function instance. We do not store the function at this point
-    new_function = create(
-        session,
-        Function,
-        repository=repository,
-        node=node,
-        file_path=file_path)
-
-    logger.info('There is a new function: {}'.format(new_function))
-    return new_function
-
-
 def sync_mirror_repo(repository: Repository):
     '''
     Updates the mirror repository to match the code base the developer is
@@ -305,8 +110,7 @@ def sync_mirror_repo(repository: Repository):
     run_cmd(repository, command, log=True)
 
 
-def get_diff_patches(repository: Repository,
-                     commit: Commit=None,
+def get_diff_patches(commit: Commit=None,
                      split_per_method=True) -> List[str]:
     '''
     Creates a patch file containing all the diffs in the repository and then
@@ -316,43 +120,91 @@ def get_diff_patches(repository: Repository,
     command = 'git --no-pager diff'
     if commit:
         command += ' {hash}~ {hash}'.format(hash=commit.commit_id)
-    diff_data, _ = run_cmd(repository, command)
+    diff_data, _ = run_cmd(commit.repository, command)
 
-    patches = diff_data.split('diff --git ')[1:]
-    if split_per_method:
-        method_granular_patches = []
-        for patch in patches:
-            if len(re.findall(RANGE_INFO_REGEX, patch)) > 1:
-                # it looks like there were multiple edits that made it into
-                # the same hunk.  We need to split each part of the patch hunk
-                # into it's own chunk.  First step is to keep the first four
-                # lines, the header, which will become the first four lines
-                # of each sub-chunk.  For example:
-                patch_lines = patch.split('\n')
-                header = patch_lines[0:4]
-
-                starting_line = 4
-                sub_patch_lines = []
-                for i in range(4, len(patch_lines)):
-                    if (re.findall(RANGE_INFO_REGEX, patch_lines[i]) or
-                            i == len(patch_lines) - 1):
-                        if sub_patch_lines:
-                            sub_patch = '\n'.join(
-                                header + patch_lines[starting_line: i])
-                            method_granular_patches.append(sub_patch)
-
-                            # start over for the next subpatch
-                            sub_patch_lines = []
-                            starting_line = i
-
-                    sub_patch_lines.append(patch_lines[i])
-
-            else:
-                method_granular_patches.append(patch)
-        patches = method_granular_patches
+    # import pdb; pdb.set_trace()
+    raw_patches = diff_data.split('diff --git ')[1:]
 
     # covert the list of patches into whatthepatch patch objects
-    return [list(whatthepatch.parse_patch(patch))[0] for patch in patches]
+    patches = [list(whatthepatch.parse_patch(patch))[0]
+               for patch in raw_patches]
+
+    if split_per_method and commit.function_histories:
+        patches = _split_patches_by_method(commit, patches)
+
+    return patches
+
+
+def _split_patches_by_method(commit: Commit, patches):
+    '''
+    Given whatthepatch patches, it will split them up by methods so one patch
+    doesn't go across multiple methods
+    '''
+    granular_patches = []
+
+    for patch in patches:
+        start_range, end_range = get_range_of_patch(patch)
+        histories = commit.get_function_histories(
+            file_path=patch.header.new_path,
+            start_range=start_range,
+            end_range=end_range,
+        )
+
+        if len(histories) > 1:
+            # this patch spans across multiple functions, we need to split it
+            # up.  We are going to split the raw text at the start point of
+            # each function.
+            split_ranges = []
+            raw_patch_lines = patch.text.split('\n')
+            header = raw_patch_lines[0:4]
+
+            for i in range(len(histories)):
+                if i == 0:
+                    split_ranges.append((0, histories[i + 1].first_line))
+
+                elif i == len(histories) - 1:
+                    split_ranges.append(
+                        (histories[i].first_line, len(raw_patch_lines) + 1))
+
+                else:
+                    split_ranges.append(
+                        (histories[i].first_line, histories[i + 1].first_line))
+
+            sub_patches = []
+            for start, end in split_ranges:
+                sub_patch = '\n'.join(
+                    header + raw_patch_lines[start: end])
+                sub_patches.append(sub_patch)
+
+            granular_patches.extend(sub_patches)
+
+        else:
+            granular_patches.append(patch)
+
+    return granular_patches
+
+
+def get_range_of_patch(patch):
+    '''
+    Given a whatthepatch patch, it will return the start and end range of the
+    patch.  We consider the start of the patch not to be the first line
+    necessarily, but the first line that is changed.
+    '''
+    start_range = None
+    end_range = None
+    for original_line, new_line, change in patch.changes:
+        if original_line is None or new_line is None:
+            if not start_range:
+                start_range = new_line or original_line
+
+            if not end_range or (new_line or -1) > end_range:
+                end_range = new_line or original_line
+
+    if start_range is None or end_range is None:
+        import pdb; pdb.set_trace()
+        logger.error('Failed to get start_range or end_range')
+
+    return start_range, end_range
 
 
 def get_function_from_patch(repository: Repository,
@@ -382,57 +234,6 @@ def get_function_from_patch(repository: Repository,
             name=function_name,
             file_path=file_path,
         )
-
-
-def create_diffs(repository: Repository,
-                 commit: Commit=None,
-                 is_synthetic=False,
-                 function: Function=None) -> DiffList:
-    '''
-    Returns a list of diffs from a repository
-    '''
-    session = Session.object_session(repository)
-    if not commit:
-        commit = get_most_recent_commit(repository)
-
-    diffs = []
-
-    patches = get_diff_patches(repository, commit)
-    for patch in patches:
-        file_path = patch.header.new_path
-
-        # this only works for addition diffs
-        first_line = 0
-        for old_line_number, new_line_number, line in patch.changes:
-            if not old_line_number and new_line_number:
-                first_line = new_line_number
-                break
-
-        last_line = first_line + 1
-
-        # TODO - make sure it can get the function from the patch
-        if not function:
-            function = get_function_from_patch(
-                repository,
-                patch.text,
-                file_path,
-                first_line,
-                last_line)
-
-        diff = create(
-            session,
-            Diff,
-            commit=commit,
-            first_line=first_line,
-            last_line=last_line,
-            patch=patch.text,
-            function=function,
-            file_path=file_path,
-            is_synthetic=is_synthetic)
-
-        diffs.append(diff)
-
-    return diffs
 
 
 def apply_diff(diff: Diff):

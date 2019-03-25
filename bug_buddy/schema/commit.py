@@ -6,6 +6,7 @@ The Commit model.  A record of a particular change in a repository's code
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
+import sys
 
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.constants import TEST_OUTPUT_FAILURE, SYNTHETIC_CHANGE
@@ -116,6 +117,52 @@ class Commit(Base):
                     return True
 
         return False
+
+    def get_function_histories(self,
+                               file_path: str,
+                               start_range: int,
+                               end_range: int):
+        '''
+        Retrieves the function histories the match a given file_path and range
+        '''
+        return [function_history for function_history in self.function_histories
+                if (function_history.function.file_path == file_path and
+                    function_history.first_line <= start_range and
+                    function_history.last_line >= end_range)]
+
+    def get_corresponding_function(self,
+                                   file_path: str,
+                                   start_range: int,
+                                   end_range: int):
+        '''
+        Retrieves the the function history that most tightly matches a given
+        file_path and range
+
+        def func:
+            def cat:
+                ## edit here
+                x = 1
+            x = 2
+
+        get_corresponding_function would return 'def cat' for the matching
+        function unlike get_function_histories which would return func and cat
+        '''
+        matching_functions = self.get_function_histories(
+            file_path, start_range, end_range)
+
+        matching_function = None
+        matching_function_difference = sys.maxsize
+
+        for function_history in matching_functions:
+            function_difference = (
+                start_range - function_history.first_line +
+                function_history.last_line - end_range)
+
+            if function_difference < matching_function_difference:
+                matching_function_difference = function_difference
+                matching_function = function_history
+
+        return matching_function
 
     @property
     def blames(self):

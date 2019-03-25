@@ -18,10 +18,13 @@ from bug_buddy.logger import logger
 from bug_buddy.schema import Commit, Diff, Repository, Function
 
 
-def run_cmd(repository: Repository, command: str, log=False):
+def run_cmd(repository: Repository, command: str, log=True):
     '''
     Runs a shell command
     '''
+    if log:
+        logger.info(command)
+
     process = subprocess.Popen(
         command,
         shell=True,
@@ -29,7 +32,7 @@ def run_cmd(repository: Repository, command: str, log=False):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE)
     stdout, stderr = process.communicate()
-    if log or stderr:
+    if log and stderr:
         if stdout:
             logger.info('stdout from command: "{}"\n{}'.format(command, stdout))
         if stderr:
@@ -62,14 +65,14 @@ def set_bug_buddy_branch(repository: Repository):
     https://stackoverflow.com/a/35683029/4447761
     '''
     command = 'git checkout bug_buddy || git checkout -b bug_buddy'
-    stdout, stderr = run_cmd(repository, command)
+    stdout, stderr = run_cmd(repository, command, log=False)
 
     # make sure the branch is pushed remotely
     all_branches = Git(repository.path).branch('-a')
 
     if 'remotes/origin/bug_buddy' not in all_branches:
         command = 'git push --set-upstream origin bug_buddy'
-        stdout, stderr = run_cmd(repository, command)
+        stdout, stderr = run_cmd(repository, command, log=False)
 
 
 def get_commit_id(repository: Repository) -> str:

@@ -22,6 +22,7 @@ class Diff(Base):
 
     first_line = Column(Integer, nullable=False)
     last_line = Column(Integer, nullable=False)
+
     file_path = Column(String, nullable=False)
 
     # All diffs have a corresponding commit

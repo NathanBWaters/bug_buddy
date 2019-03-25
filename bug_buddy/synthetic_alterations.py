@@ -39,7 +39,7 @@ from bug_buddy.constants import (BENIGN_STATEMENT,
                                  PYTHON_FILE_TYPE,
                                  SYNTHETIC_CHANGE,
                                  SYNTHETIC_FIXING_CHANGE)
-from bug_buddy.db import session_manager, Session
+from bug_buddy.db import session_manager, Session, create
 from bug_buddy.errors import UserError
 from bug_buddy.git_utils import (
     create_commit,
@@ -53,12 +53,18 @@ from bug_buddy.git_utils import (
     update_commit)
 from bug_buddy.runner import run_test, library_is_testable
 from bug_buddy.logger import logger
-from bug_buddy.schema import Repository, Function, TestRun, Commit, Diff
-from bug_buddy.snapshot import snapshot_commit
+from bug_buddy.schema import (
+    Commit,
+    Diff,
+    Function,
+    FunctionHistory,
+    Repository,
+    TestRun)
+from bug_buddy.snapshot import snapshot_commit, create_diffs
 from bug_buddy.source import (
     apply_diff,
-    create_diffs,
-    create_synthetic_alterations)
+    get_function_nodes_from_repo,
+    revert_diff)
 
 
 def yield_blame_set(repository: Repository):
@@ -165,3 +171,86 @@ def _get_assert_statement(repo_function):
     '''
     is_error_statement = random.randint(0, 1)
     return ERROR_STATEMENT if is_error_statement else BENIGN_STATEMENT
+
+
+def create_synthetic_alterations(repository: Repository):
+    '''
+    Creates synthetic changes to a code base, creates a commit, and then runs
+    the tests to see how the changes impacted the test results.  These changes
+    are either 'assert False' or 'assert True'.
+
+    @param repository: the code base we are changing
+    @param commit: the empty commit we're adding changes to
+    '''
+    # create an empty commit that the diffs will be added to
+    commit = create_commit(
+        repository,
+        name='synthetic_alterations',
+        commit_type=SYNTHETIC_CHANGE,
+        allow_empty=True)
+
+    function_nodes = get_function_nodes_from_repo(repository)
+    for node in function_nodes:
+        create_synthetic_diff_for_node(
+            repository,
+            commit,
+            node)
+
+
+def create_synthetic_diff_for_node(repository: Repository,
+                                   commit: Commit,
+                                   node):
+    '''
+    Creates the visited function and adds an 'assert False' to the node.
+    This is used for creating synthetic 'assert False' diffs for each function.
+    '''
+    session = Session.object_session(repository)
+
+    # create the function instance
+    function = create(
+        session,
+        Function,
+        repository=repository,
+        node=node,
+        file_path=node.file_path)
+
+    # create the function history instance
+    create(
+        session,
+        FunctionHistory,
+        function=function,
+        commit=commit,
+        node=node,
+        first_line=function.first_line,
+        # we need the minus 1 because when we complete the commit the
+        # 'assert False' line will have been removed
+        last_line=function.last_line - 1,
+        altered=True,
+    )
+
+    logger.info('There is a new function: {}'.format(function))
+
+    added_line = function.prepend_statement('assert False')
+
+    if library_is_testable(repository):
+        # create a new diff from this one change
+        diffs = create_diffs(
+            repository,
+            commit=commit,
+            function=function,
+            is_synthetic=True)
+        assert len(diffs) == 1
+        diff = diffs[0]
+        logger.info('Created diff: {}'.format(diff))
+
+        # this is the function's synthetic diff
+        function.synthetic_diff = diff
+
+        # go back to a clean repository
+        revert_diff(diff)
+
+    else:
+        # remove the addition from the source code
+        function.remove_line(added_line)
+
+    return node
