@@ -16,13 +16,14 @@ def _train(args):
     commands.train_command(args.path.strip())
 
 
-def _watch(args):
+def _watch(args, commit_only):
     '''
     Parses arguments and passes them to the train subcommand module
 
     @param args: the argparse arguments
     '''
-    commands.watch_command(args.path.strip())
+    print(commit_only)
+    # commands.watch_command(args.path.strip(), commit_only=commit_only)
 
 
 def _analyze(args):
@@ -156,6 +157,7 @@ if __name__ == '__main__':
         description='Watches a repository and records any changes',
         help=('Watches a repository and records any changes'))
     watch_command.set_defaults(func=_watch)
+    watch_command.add_argument('-c', '--commit-only', action='store_false')
     watch_command.add_argument(
         'path',
         type=str,

@@ -34,7 +34,8 @@ from bug_buddy.blaming import (
     powerset,
     synthetic_blame,
     get_diff_set_hash)
-from bug_buddy.constants import (BENIGN_STATEMENT,
+from bug_buddy.constants import (BASE_SYNTHETIC_CHANGE,
+                                 BENIGN_STATEMENT,
                                  ERROR_STATEMENT,
                                  PYTHON_FILE_TYPE,
                                  SYNTHETIC_CHANGE,
@@ -67,7 +68,7 @@ from bug_buddy.source import (
     revert_diff)
 
 
-def yield_blame_set(repository: Repository):
+def yield_blame_set(synthetic_diffs: Repository):
     '''
     Returns a set of diffs.
 
@@ -75,12 +76,11 @@ def yield_blame_set(repository: Repository):
     2) Once all diffs have been returned individually, it will then returns a
        set of 4 diffs that were randomly chosen.
     '''
-    diffs = repository.diffs
-
     while True:
         diff_set = []
         for i in range(4):
-            diff_set.append(diffs[random.randint(0, len(diffs))])
+            diff_set.append(
+                synthetic_diffs[random.randint(0, len(synthetic_diffs))])
 
         logger.info('Yielding diff set: {}'.format(diff_set))
         # remove duplicates if they exist
@@ -92,9 +92,16 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
     Creates multiple synthetic changes and test results
     '''
     session = Session.object_session(repository)
+    synthetic_diffs = repository.get_synthetic_diffs()
+
+    if not synthetic_diffs:
+        # create the synthetic diffs
+        create_synthetic_alterations(repository)
+
+        synthetic_diffs = repository.get_synthetic_diffs()
 
     num_runs = 0
-    for diff_set in yield_blame_set(repository):
+    for diff_set in yield_blame_set(synthetic_diffs):
         logger.info('On diff set: {}'.format(diff_set))
 
         for diff_subset in powerset(diff_set):
@@ -185,8 +192,8 @@ def create_synthetic_alterations(repository: Repository):
     # create an empty commit that the diffs will be added to
     commit = create_commit(
         repository,
-        name='synthetic_alterations',
-        commit_type=SYNTHETIC_CHANGE,
+        name='base_synthetic_change',
+        commit_type=BASE_SYNTHETIC_CHANGE,
         allow_empty=True)
 
     function_nodes = get_function_nodes_from_repo(repository)
@@ -195,6 +202,8 @@ def create_synthetic_alterations(repository: Repository):
             repository,
             commit,
             node)
+
+    git_push(commit)
 
 
 def create_synthetic_diff_for_node(repository: Repository,
@@ -225,7 +234,6 @@ def create_synthetic_diff_for_node(repository: Repository,
         # we need the minus 1 because when we complete the commit the
         # 'assert False' line will have been removed
         last_line=function.last_line - 1,
-        altered=True,
     )
 
     logger.info('There is a new function: {}'.format(function))
@@ -238,8 +246,13 @@ def create_synthetic_diff_for_node(repository: Repository,
             repository,
             commit=commit,
             function=function,
-            is_synthetic=True)
+            is_synthetic=True,
+            allow_empty=False)
+
+        # There should always be only one diff created from altering one
+        # function
         assert len(diffs) == 1
+
         diff = diffs[0]
         logger.info('Created diff: {}'.format(diff))
 

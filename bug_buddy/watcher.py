@@ -15,17 +15,19 @@ from bug_buddy.snapshot import snapshot
 from bug_buddy.source import sync_mirror_repo
 
 
-class Watchdog(PatternMatchingEventHandler):
+class ChangeWatchdog(PatternMatchingEventHandler):
     '''
-    Is notified every time an event occurs on the fileystem
+    Is notified every time an event occurs on the fileystem and will snapshot
+    the change
     '''
-    def __init__(self, repository):
+    def __init__(self, repository, commit_only: bool):
         '''
-        Create a Watchdog instance
+        Create a ChangeWatchdog instance
         '''
         super().__init__()
 
         self.repository = repository
+        self.commit_only = commit_only
 
     def on_any_event(self, event):
         '''
@@ -44,22 +46,23 @@ class Watchdog(PatternMatchingEventHandler):
                 repository = get(session, Repository, id=self.repository.id)
                 logger.info('Updating the mirror repository')
                 # Copy the change over to the mirror repository
-                sync_mirror_repo(repository)
+                sync_mirror_repo(repository,)
 
                 # make sure the repository is on the bug_buddy branch
-                commit = snapshot(repository)
+                commit = snapshot(repository, commit_only=self.commit_only)
                 print('Completed snapshot of {}'.format(commit))
 
+                # run the tests in a appropriate order
                 session.commit()
 
 
-def watch(repository: Repository):
+def watch(repository: Repository, commit_only: bool):
     '''
     Watches the repository's filesystem for changes and records the changes.
     It also notifies the user when there is an update in the test output.
     '''
     logger.info('Starting BugBuddy watcher')
-    event_handler = Watchdog(repository)
+    event_handler = ChangeWatchdog(repository, commit_only)
     observer = Observer()
     observer.schedule(event_handler, repository.original_path, recursive=True)
     observer.start()

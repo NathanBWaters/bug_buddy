@@ -31,13 +31,13 @@ def train_command(src_path: str):
         train(repository)
 
 
-def watch_command(src_path: str):
+def watch_command(src_path: str, commit_only: bool):
     '''
     Watches a repository and records any changes
     '''
     with session_manager() as session:
         repository = _get_repository_from_src_path(session, src_path)
-        watch(repository)
+        watch(repository, commit_only)
 
 
 def initialize_command(src_path: str,
@@ -73,6 +73,8 @@ def generate_command(src_path: str, run_limit: int=None):
     with session_manager() as session:
         repository = _get_repository_from_src_path(session, src_path)
 
+        _check_repo_is_clean(repository)
+
         logger.info('Creating synthetic results for: {}'.format(repository))
 
         generate_synthetic_test_results(repository, run_limit)
@@ -104,6 +106,16 @@ def delete_command(src_path: str):
 
         else:
             logger.info('No matching repo found in the database')
+
+
+def _check_repo_is_clean(repository, path=None):
+    '''
+    Requires the user to clean the repo if it's has unchecked in files
+    '''
+    while not is_repo_clean(repository, path=path or repository.path):
+        msg = ('You cannot initialize an unclean repository.  Please clean '
+               'the repository and then hit enter:\n')
+        input(msg)
 
 
 def _initialize_repository(session,
@@ -142,19 +154,14 @@ def _initialize_repository(session,
             src_directory=src_directory,
             src_path=src_path)
 
-    while not is_repo_clean(repository, path=repository.original_path):
-        msg = ('You cannot initialize an unclean repository.  Please clean '
-               'the repository and then hit enter:\n')
-        input(msg)
+    _check_repo_is_clean(repository, path=repository.original_path)
 
     # create the mirror repository that BugBuddy primarily works on
     sync_mirror_repo(repository)
 
     # Initialize the repository by recording functions and creating synthetic
     # diffs
-    snapshot(repository)
-
-    # create_synthetic_alterations(repository)
+    snapshot(repository, allow_empty=True)
 
     session.commit()
     logger.info('Your repository "{}" has been successfully initialized!'

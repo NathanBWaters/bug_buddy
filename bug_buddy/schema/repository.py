@@ -8,7 +8,10 @@ from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
-from bug_buddy.constants import PYTHON_FILE_TYPE, MIRROR_ROOT
+from bug_buddy.constants import (
+    BASE_SYNTHETIC_CHANGE,
+    MIRROR_ROOT,
+    PYTHON_FILE_TYPE)
 from bug_buddy.constants import FILE_TYPES
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.schema.base import Base
@@ -96,7 +99,8 @@ class Repository(Base):
         Returns the path to the mirrored repository that is updated in parallel
         to the src_path that the developer is working on
         '''
-        return os.path.join(MIRROR_ROOT, self.original_path.split('/')[-1])
+        return os.path.join(MIRROR_ROOT,
+                            self.original_path.split('/')[-1] + '_mirror')
 
     @property
     def path(self):
@@ -124,6 +128,22 @@ class Repository(Base):
                 repository_files.append(absolute_path)
 
         return repository_files
+
+    @property
+    def base_synthetic_commits(self):
+        '''
+        Returns all base synthetic commits for this repository
+        '''
+        return [commit for commit in self.commits
+                if commit.commit_type == BASE_SYNTHETIC_CHANGE]
+
+    def get_synthetic_diffs(self):
+        '''
+        Returns the synthetic_diffs
+        '''
+        [diff for commit in self.base_synthetic_commits for diff in commit.diffs]
+        return [diff for commit in self.base_synthetic_commits
+                for diff in commit.diffs]
 
     def __repr__(self):
         '''

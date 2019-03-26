@@ -18,6 +18,13 @@ from bug_buddy.logger import logger
 from bug_buddy.schema import Commit, Diff, Repository, Function
 
 
+def db_and_git_match(repository: Repository, command: str, log=True):
+    '''
+    Confirms if the database commit history and git commit history match.
+    '''
+    assert False, 'implement me!'
+
+
 def run_cmd(repository: Repository, command: str, log=True):
     '''
     Runs a shell command
@@ -154,14 +161,6 @@ def update_commit(repository: Repository):
 
     # git commit --amend
     Git(repository.path).commit('--amend')
-
-
-def add_function_histories(repository: Repository, commit: Commit):
-    '''
-    Adds the FunctionHistory for each function in the commit.  It adds
-    information such as whether or not it was changed.
-    '''
-    assert False, 'implement add_function_histories'
 
 
 def revert_commit(repository: Repository, commit: Commit):

@@ -23,7 +23,7 @@ from bug_buddy.git_utils import (
 from bug_buddy.logger import logger
 from bug_buddy.runner import library_is_testable
 from bug_buddy.schema import Commit, Diff, Function, FunctionHistory, Repository
-from bug_buddy.schema.aliases import FunctionList, DiffList
+from bug_buddy.schema.aliases import FunctionList, DiffList, FunctionHistoryList
 
 
 class AstTreeWalker(ast.NodeTransformer):
@@ -49,7 +49,10 @@ class AstTreeWalker(ast.NodeTransformer):
 
     def visit_FunctionDef(self, node):
         '''
-        Is called when the transformer hits a function node
+        Is called when the transformer hits a function node.  Note that child
+        nodes of nodes that have a custom visitor method won’t be visited
+        unless the visitor calls generic_visit() or visits them itself, so we
+        need to do that.
         '''
         # Add extra attributes to the node
         node.file_path = os.path.relpath(self.file_path, self.repository.path)
@@ -59,6 +62,9 @@ class AstTreeWalker(ast.NodeTransformer):
 
         # store the function that was visited
         self.function_nodes.append(node)
+
+        for child_node in node.body:
+            self.generic_visit(child_node)
 
 
 def get_function_nodes_from_repo(repository: Repository):
@@ -122,7 +128,11 @@ def get_diff_patches(commit: Commit=None,
         command += ' {hash}~ {hash}'.format(hash=commit.commit_id)
     diff_data, _ = run_cmd(commit.repository, command)
 
-    # import pdb; pdb.set_trace()
+    # TODO: MY GOODNESS this is such a hack
+    if not diff_data:
+        command = 'git --no-pager diff'
+        diff_data, _ = run_cmd(commit.repository, command)
+
     raw_patches = diff_data.split('diff --git ')[1:]
 
     # covert the list of patches into whatthepatch patch objects
@@ -143,38 +153,49 @@ def _split_patches_by_method(commit: Commit, patches):
     granular_patches = []
 
     for patch in patches:
-        start_range, end_range = get_range_of_patch(patch)
-        histories = commit.get_function_histories(
-            file_path=patch.header.new_path,
-            start_range=start_range,
-            end_range=end_range,
-        )
+        granular_patches.extend(_split_patch_by_method(commit, patch))
 
-        if len(histories) > 1:
-            # this patch spans across multiple functions, we need to split it
-            # up.  We are going to split the raw text at the start point of
-            # each function.
-            split_ranges = []
-            raw_patch_lines = patch.text.split('\n')
-            header = raw_patch_lines[0:4]
+    return granular_patches
 
-            for i in range(len(histories)):
-                if i == 0:
-                    split_ranges.append((0, histories[i + 1].first_line))
 
-                elif i == len(histories) - 1:
-                    split_ranges.append(
-                        (histories[i].first_line, len(raw_patch_lines) + 1))
+def _split_patch_by_method(commit: Commit, patches):
+    '''
+    Given whatthepatch patches, it will split them up by methods so one patch
+    doesn't go across multiple methods
+    '''
+    granular_patches = []
+    start_range, end_range = get_range_of_patch(patch)
 
-                else:
-                    split_ranges.append(
-                        (histories[i].first_line, histories[i + 1].first_line))
+    histories = commit.get_function_histories(
+        file_path=patch.header.new_path,
+        start_range=start_range,
+        end_range=end_range,
+    )
 
-            sub_patches = []
-            for start, end in split_ranges:
-                sub_patch = '\n'.join(
-                    header + raw_patch_lines[start: end])
-                sub_patches.append(sub_patch)
+    if len(histories) > 1:
+        sub_patches = []
+        # this patch spans across multiple functions, we need to split it
+        # up.  We are going to split the raw text at the start point of
+        # each function.
+        for history in histories:
+            sub_patch = _match_patch_with_history(patch, history)
+
+            if not sub_patch.changes:
+                # If the parsed patch does not have any changes, then
+                # nothing happened to that function and we can remove this
+                # part of the patch
+                msg = (
+                    'No changes for the parsed_patch for sub_patch:\n'
+                    '{sub_patch}\nThis was range {start}-{end} of:\n'
+                    '{patch}'
+                    .format(sub_patch=sub_patch,
+                            start=start,
+                            end=end,
+                            patch=patch))
+                logger.debug(msg)
+                import pdb; pdb.set_trace()
+
+            sub_patches.append(sub_patch)
 
             granular_patches.extend(sub_patches)
 
@@ -184,6 +205,51 @@ def _split_patches_by_method(commit: Commit, patches):
     return granular_patches
 
 
+def _match_patch_with_history(patch, function_histories: FunctionHistoryList):
+    '''
+    Returns a modified form of the patch for the function history
+
+    It would turn following patch:
+
+        def a:
+            dog = 'dog'
+    +        # added to a
+
+            def b:
+                cat = 'cat'
+    +            # added to b
+
+            more_dog_stuff = 2
+    +        # added more to a
+
+
+    Into two patches:
+    1) for function history 'def a'
+
+        def a:
+            dog = 'dog'
+    +        # added to a
+
+            def b:
+                cat = 'cat'
+
+            more_dog_stuff = 2
+    +        # added more to a
+
+    2) for function history 'def b''
+
+        def a:
+            dog = 'dog'
+
+            def b:
+                cat = 'cat'
+    +            # added to b
+
+            more_dog_stuff = 2
+
+
+
+    '''
 def get_range_of_patch(patch):
     '''
     Given a whatthepatch patch, it will return the start and end range of the
@@ -192,6 +258,7 @@ def get_range_of_patch(patch):
     '''
     start_range = None
     end_range = None
+
     for original_line, new_line, change in patch.changes:
         if original_line is None or new_line is None:
             if not start_range:
@@ -203,6 +270,11 @@ def get_range_of_patch(patch):
     if start_range is None or end_range is None:
         import pdb; pdb.set_trace()
         logger.error('Failed to get start_range or end_range')
+
+    logger.info('{}-{}'.format(start_range, end_range))
+    if end_range - start_range > 25 or (start_range == 0 and end_range == 132):
+        import pdb; pdb.set_trace()
+        logger.error('What in tarnation')
 
     return start_range, end_range
 
@@ -279,6 +351,7 @@ def _apply_diff(diff: Diff, revert=False):
                            stderr=stderr))
             raise BugBuddyError(msg)
     except Exception as e:
+        import pdb; pdb.set_trace()
         logger.error('Hit error trying to apply diff: {}'.format(e))
     finally:
         if temp_output:

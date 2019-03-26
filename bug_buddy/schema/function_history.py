@@ -28,9 +28,6 @@ class FunctionHistory(Base):
     first_line = Column(Integer, nullable=False)
     last_line = Column(Integer, nullable=False)
 
-    # whether or not the function was altered in the commit
-    altered = Column(Boolean, nullable=False)
-
     # a serialized or 'pickled' form of the AST node
     source_code = Column(String, nullable=False)
 
@@ -57,8 +54,7 @@ class FunctionHistory(Base):
                  commit: Commit,
                  node,
                  first_line: int,
-                 last_line: int,
-                 altered: bool):
+                 last_line: int):
         '''
         Creates a new FunctionHistory instance.
         '''
@@ -67,12 +63,24 @@ class FunctionHistory(Base):
         self.source_code = astor.to_source(node)
         self.first_line = first_line
         self.last_line = last_line
-        self.altered = altered
+
+    @property
+    def altered(self):
+        '''
+        Whether or not the function was modified for this commit
+        '''
+        corresponding_diff = [diff for diff in self.function.diffs if
+                              diff.commit_id == self.commit.commit_id]
+        return bool(corresponding_diff)
 
     def __repr__(self):
         '''
         Converts the FunctionHistory into a string
         '''
-        return ('<FunctionHistory {name} | {commit} />'
+        return ('<FunctionHistory {name} | {commit} | '
+                '{file_path}@{first_line}-{last_line}/>'
                 .format(name=self.function.name,
-                        commit=self.commit.commit_id))
+                        commit=self.commit.commit_id,
+                        file_path=self.function.file_path,
+                        first_line=self.first_line,
+                        last_line=self.last_line))

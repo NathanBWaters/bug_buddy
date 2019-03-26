@@ -11,7 +11,12 @@ from sqlalchemy.orm.exc import NoResultFound
 import sys
 
 from bug_buddy.constants import PYTHON_FILE_TYPE, DEVELOPER_CHANGE
-from bug_buddy.db import create, Session, session_manager
+from bug_buddy.db import (
+    create,
+    Session,
+    session_manager,
+    create_new_functions_from_nodes)
+
 from bug_buddy.errors import UserError, BugBuddyError
 from bug_buddy.git_utils import (
     create_commit,
@@ -41,7 +46,7 @@ PREVIOUS_HISTORY = 'PREVIOUS_HISTORY'
 CURRENT_NODE = 'CURRENT_NODE'
 
 
-def snapshot(repository: Repository):
+def snapshot(repository: Repository, allow_empty=False, only_commit=False):
     '''
     Snapshots a dirty commit tree and records everything
     '''
@@ -49,9 +54,12 @@ def snapshot(repository: Repository):
     try:
         session = Session.object_session(repository)
 
-        commit = create_commit(repository, commit_type=DEVELOPER_CHANGE)
+        commit = create_commit(repository,
+                               commit_type=DEVELOPER_CHANGE,
+                               allow_empty=allow_empty)
 
-        snapshot_commit(repository, commit)
+        if not only_commit:
+            snapshot_commit(repository, commit)
 
         git_push(repository)
 
@@ -155,8 +163,7 @@ def save_function_histories(repository: Repository,
             commit=commit,
             node=function_node,
             first_line=previous_function_history.first_line,
-            last_line=previous_function_history.last_line,
-            altered=False)
+            last_line=previous_function_history.last_line)
 
         logger.info('Created unaltered function history: {}'
                     .format(function_history))
@@ -231,42 +238,13 @@ def _save_altered_file_function_history(commit: Commit,
                     commit=commit,
                     node=node,
                     first_line=node.first_line,
-                    last_line=node.last_line,
-                    altered=True)
+                    last_line=node.last_line)
 
                 logger.info('Created altered function history: {}'
                             .format(function_history))
 
             # convert all unmatched nodes into new functions
             create_new_functions_from_nodes(commit, unmatched_nodes)
-
-
-def create_new_functions_from_nodes(commit: Commit, function_nodes):
-    '''
-    Given a list of function nodes, it will create new functions
-    '''
-    session = Session.object_session(commit)
-    for node in function_nodes:
-        # create the function instance
-        function = create(
-            session,
-            Function,
-            repository=commit.repository,
-            node=node,
-            file_path=node.file_path)
-
-        # We have a new function!
-        function_history = create(
-            session,
-            FunctionHistory,
-            function=function,
-            commit=commit,
-            node=node,
-            first_line=node.first_line,
-            last_line=node.last_line,
-            altered=True)
-
-        logger.info('Created new function history: {}'.format(function_history))
 
 
 def _match_nodes_with_history(previous_histories, current_nodes):
@@ -316,7 +294,8 @@ def save_diffs(repository: Repository,
 def create_diffs(repository: Repository,
                  commit: Commit=None,
                  is_synthetic=False,
-                 function: Function=None) -> DiffList:
+                 function: Function=None,
+                 allow_empty=True) -> DiffList:
     '''
     Returns a list of diffs from a repository
     '''
@@ -329,25 +308,30 @@ def create_diffs(repository: Repository,
     # the patches should be split on a per function basis
     patches = get_diff_patches(commit)
 
+    if not allow_empty and not patches:
+        import pdb; pdb.set_trace()
+        logger.error('No diffs discovered when allow_no_diffs == False')
+        get_diff_patches(commit)
+
     for patch in patches:
+        diff_function = function
         file_path = patch.header.new_path
         first_line, last_line = get_range_of_patch(patch)
 
-        if not function:
-            # import pdb; pdb.set_trace()
+        if not diff_function:
             function_history = commit.get_corresponding_function(
                 file_path=file_path,
                 start_range=first_line,
                 end_range=last_line,
             )
-            function = function_history.function if function_history else None
+            diff_function = function_history.function if function_history else None
 
         diff = create(
             session,
             Diff,
             commit=commit,
             patch=patch.text,
-            function=function,
+            function=diff_function,
             file_path=file_path,
             is_synthetic=is_synthetic,
             first_line=first_line,
