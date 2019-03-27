@@ -43,7 +43,8 @@ def watch_command(src_path: str, commit_only: bool):
 def initialize_command(src_path: str,
                        initialize_commands: str=None,
                        test_commands: str=None,
-                       src_directory: str=None):
+                       src_directory: str=None,
+                       commit_only: bool=False):
     '''
     Initializes a repository
     '''
@@ -52,7 +53,8 @@ def initialize_command(src_path: str,
                                src_path,
                                initialize_commands,
                                test_commands,
-                               src_directory)
+                               src_directory,
+                               commit_only)
 
 
 def analyze_command(repository_name: str):
@@ -122,7 +124,8 @@ def _initialize_repository(session,
                            src_path: str,
                            initialize_commands: str=None,
                            test_commands: str=None,
-                           src_directory: str=None):
+                           src_directory: str=None,
+                           commit_only=False):
     '''
     Given a src_path to a repository, create the repository in the database
     '''
@@ -161,7 +164,8 @@ def _initialize_repository(session,
 
     # Initialize the repository by recording functions and creating synthetic
     # diffs
-    snapshot(repository, allow_empty=True)
+    if not commit_only:
+        snapshot(repository, allow_empty=True)
 
     session.commit()
     logger.info('Your repository "{}" has been successfully initialized!'

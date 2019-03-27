@@ -16,14 +16,13 @@ def _train(args):
     commands.train_command(args.path.strip())
 
 
-def _watch(args, commit_only):
+def _watch(args):
     '''
     Parses arguments and passes them to the train subcommand module
 
     @param args: the argparse arguments
     '''
-    print(commit_only)
-    # commands.watch_command(args.path.strip(), commit_only=commit_only)
+    commands.watch_command(args.path.strip(), commit_only=args.commit_only)
 
 
 def _analyze(args):
@@ -65,7 +64,8 @@ def _initialize(args):
         src_path=args.path,
         initialize_commands=args.initialize_commands,
         test_commands=args.test_commands,
-        src_directory=args.source_directory)
+        src_directory=args.source_directory,
+        commit_only=args.commit_only)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -120,6 +120,11 @@ if __name__ == '__main__':
         '--source-directory',
         type=str,
         help='The subdirectory of your project that contains your project files')
+    initialize_command.add_argument(
+        '-c',
+        '--commit-only',
+        action='store_true',
+        help='Only store commits rather than analyzing them')
 
     ###################################
     #  Delete SubCommand
@@ -157,11 +162,15 @@ if __name__ == '__main__':
         description='Watches a repository and records any changes',
         help=('Watches a repository and records any changes'))
     watch_command.set_defaults(func=_watch)
-    watch_command.add_argument('-c', '--commit-only', action='store_false')
     watch_command.add_argument(
         'path',
         type=str,
         help='Path to the repository you want to watch')
+    watch_command.add_argument(
+        '-c',
+        '--commit-only',
+        action='store_true',
+        help='Only store commits rather than analyzing them')
 
     args = parser.parse_args()
     args.func(args)

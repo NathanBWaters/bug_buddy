@@ -11,12 +11,7 @@ from sqlalchemy.orm.exc import NoResultFound
 import sys
 
 from bug_buddy.constants import PYTHON_FILE_TYPE, DEVELOPER_CHANGE
-from bug_buddy.db import (
-    create,
-    Session,
-    session_manager,
-    create_new_functions_from_nodes)
-
+from bug_buddy.db import create, Session, session_manager
 from bug_buddy.errors import UserError, BugBuddyError
 from bug_buddy.git_utils import (
     create_commit,
@@ -46,7 +41,7 @@ PREVIOUS_HISTORY = 'PREVIOUS_HISTORY'
 CURRENT_NODE = 'CURRENT_NODE'
 
 
-def snapshot(repository: Repository, allow_empty=False, only_commit=False):
+def snapshot(repository: Repository, allow_empty=False):
     '''
     Snapshots a dirty commit tree and records everything
     '''
@@ -58,8 +53,7 @@ def snapshot(repository: Repository, allow_empty=False, only_commit=False):
                                commit_type=DEVELOPER_CHANGE,
                                allow_empty=allow_empty)
 
-        if not only_commit:
-            snapshot_commit(repository, commit)
+        snapshot_commit(repository, commit)
 
         git_push(repository)
 
@@ -245,6 +239,33 @@ def _save_altered_file_function_history(commit: Commit,
 
             # convert all unmatched nodes into new functions
             create_new_functions_from_nodes(commit, unmatched_nodes)
+
+
+def create_new_functions_from_nodes(commit: Commit, function_nodes):
+    '''
+    Given a list of function nodes, it will create new functions
+    '''
+    session = Session.object_session(commit)
+    for node in function_nodes:
+        # create the function instance
+        function = create(
+            session,
+            Function,
+            repository=commit.repository,
+            node=node,
+            file_path=node.file_path)
+
+        # We have a new function!
+        function_history = create(
+            session,
+            FunctionHistory,
+            function=function,
+            commit=commit,
+            node=node,
+            first_line=node.first_line,
+            last_line=node.last_line)
+
+        logger.info('Created new function history: {}'.format(function_history))
 
 
 def _match_nodes_with_history(previous_histories, current_nodes):

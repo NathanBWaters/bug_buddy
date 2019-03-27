@@ -158,7 +158,7 @@ def _split_patches_by_method(commit: Commit, patches):
     return granular_patches
 
 
-def _split_patch_by_method(commit: Commit, patches):
+def _split_patch_by_method(commit: Commit, patch):
     '''
     Given whatthepatch patches, it will split them up by methods so one patch
     doesn't go across multiple methods
@@ -246,10 +246,13 @@ def _match_patch_with_history(patch, function_histories: FunctionHistoryList):
     +            # added to b
 
             more_dog_stuff = 2
-
-
-
     '''
+    for function_history in function_histories:
+        specific_changes = []
+
+        # for change in pat
+
+
 def get_range_of_patch(patch):
     '''
     Given a whatthepatch patch, it will return the start and end range of the
