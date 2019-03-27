@@ -34,12 +34,13 @@ from bug_buddy.blaming import (
     powerset,
     synthetic_blame,
     get_diff_set_hash)
-from bug_buddy.constants import (BASE_SYNTHETIC_CHANGE,
-                                 BENIGN_STATEMENT,
-                                 ERROR_STATEMENT,
-                                 PYTHON_FILE_TYPE,
-                                 SYNTHETIC_CHANGE,
-                                 SYNTHETIC_FIXING_CHANGE)
+from bug_buddy.constants import (
+    BASE_SYNTHETIC_CHANGE,
+    BENIGN_STATEMENT,
+    ERROR_STATEMENT,
+    PYTHON_FILE_TYPE,
+    SYNTHETIC_CHANGE,
+    SYNTHETIC_FIXING_CHANGE)
 from bug_buddy.db import session_manager, Session, create
 from bug_buddy.errors import UserError
 from bug_buddy.git_utils import (
@@ -220,6 +221,7 @@ def create_synthetic_diff_for_node(repository: Repository,
     '''
     session = Session.object_session(repository)
 
+    previous_commit = 
     function = commit.get_function_for_node(node).function
 
     # create the function history instance
