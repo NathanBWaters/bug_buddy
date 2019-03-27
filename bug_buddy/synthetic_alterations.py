@@ -226,7 +226,7 @@ def create_synthetic_diff_for_node(repository: Repository,
     function = previous_commit.get_function_for_node(node).function
 
     # create the function history instance
-    create(
+    function_history = create(
         session,
         FunctionHistory,
         function=function,
@@ -238,7 +238,7 @@ def create_synthetic_diff_for_node(repository: Repository,
         last_line=node.last_line - 1,
     )
 
-    logger.info('There is a new function: {}'.format(function))
+    logger.info('There is a new function history: {}'.format(function_history))
 
     added_line = function.prepend_statement('assert False')
 
