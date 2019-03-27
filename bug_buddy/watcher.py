@@ -51,7 +51,7 @@ class ChangeWatchdog(PatternMatchingEventHandler):
             sync_mirror_repo(repository)
 
             if not is_repo_clean(self.repository):
-                logger.info('{} event: {}'.format(self.repository.name, event))
+                logger.info('Valid change event: {}'.format(event))
 
                 # make sure the repository is on the bug_buddy branch
                 commit = snapshot(repository, commit_only=self.commit_only)
