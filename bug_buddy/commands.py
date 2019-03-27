@@ -9,10 +9,12 @@ from bug_buddy.cli import is_affirmative
 from bug_buddy.logger import logger
 from bug_buddy.db import create, get, delete, session_manager
 from bug_buddy.schema import Repository, Function, FunctionHistory, Commit
-from bug_buddy.git_utils import (delete_bug_buddy_branch,
-                                 get_repository_url_from_path,
-                                 get_repository_name_from_url,
-                                 is_repo_clean)
+from bug_buddy.git_utils import (
+    delete_bug_buddy_branch,
+    get_repository_url_from_path,
+    get_repository_name_from_url,
+    is_repo_clean,
+    set_bug_buddy_branch)
 from bug_buddy.source import sync_mirror_repo
 from bug_buddy.snapshot import snapshot
 from bug_buddy.synthetic_alterations import (
@@ -44,7 +46,8 @@ def initialize_command(src_path: str,
                        initialize_commands: str=None,
                        test_commands: str=None,
                        src_directory: str=None,
-                       commit_only: bool=False):
+                       commit_only: bool=False,
+                       ignored_files: str=''):
     '''
     Initializes a repository
     '''
@@ -54,7 +57,8 @@ def initialize_command(src_path: str,
                                initialize_commands,
                                test_commands,
                                src_directory,
-                               commit_only)
+                               commit_only,
+                               ignored_files)
 
 
 def analyze_command(repository_name: str):
@@ -93,7 +97,7 @@ def delete_command(src_path: str):
         repository = get(session, Repository, url=url)
 
         # make sure you cannot delete the bug_buddy branch
-        if repository.name != 'bug_buddy':
+        if repository.name not in ['bug_buddy', 'BugBuddy']:
             msg = ('Would you like to delete the bug_buddy branch for {}?\n'
                    '(y/n)\n'.format(repository))
             should_delete = input(msg)
@@ -125,7 +129,8 @@ def _initialize_repository(session,
                            initialize_commands: str=None,
                            test_commands: str=None,
                            src_directory: str=None,
-                           commit_only=False):
+                           commit_only=False,
+                           ignored_files=''):
     '''
     Given a src_path to a repository, create the repository in the database
     '''
@@ -155,12 +160,16 @@ def _initialize_repository(session,
             initialize_commands=initialize_commands,
             test_commands=test_commands,
             src_directory=src_directory,
-            src_path=src_path)
+            src_path=src_path,
+            ignored_files=ignored_files)
 
     _check_repo_is_clean(repository, path=repository.original_path)
 
     # create the mirror repository that BugBuddy primarily works on
     sync_mirror_repo(repository)
+
+    # make sure the mirrored repo is on bug_buddy branch
+    set_bug_buddy_branch(repository)
 
     # Initialize the repository by recording functions and creating synthetic
     # diffs

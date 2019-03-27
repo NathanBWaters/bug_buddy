@@ -65,7 +65,8 @@ def _initialize(args):
         initialize_commands=args.initialize_commands,
         test_commands=args.test_commands,
         src_directory=args.source_directory,
-        commit_only=args.commit_only)
+        commit_only=args.commit_only,
+        ignored_files=args.ignored_files or '')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -125,6 +126,12 @@ if __name__ == '__main__':
         '--commit-only',
         action='store_true',
         help='Only store commits rather than analyzing them')
+    initialize_command.add_argument(
+        '-if',
+        '--ignored-files',
+        type=str,
+        help='Comma delimited list of files that bug_buddy will ignore if it'
+             'is updated')
 
     ###################################
     #  Delete SubCommand

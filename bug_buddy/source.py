@@ -139,8 +139,8 @@ def get_diff_patches(commit: Commit=None,
     patches = [list(whatthepatch.parse_patch(patch))[0]
                for patch in raw_patches]
 
-    if split_per_method and commit.function_histories:
-        patches = _split_patches_by_method(commit, patches)
+    # if split_per_method and commit.function_histories:
+    #     patches = _split_patches_by_method(commit, patches)
 
     return patches
 

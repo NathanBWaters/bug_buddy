@@ -8,7 +8,7 @@ from watchdog.events import LoggingEventHandler, PatternMatchingEventHandler
 
 from bug_buddy.constants import MIRROR_ROOT
 from bug_buddy.db import get, session_manager
-from bug_buddy.git_utils import run_cmd, is_repo_clean
+from bug_buddy.git_utils import run_cmd, is_repo_clean, set_bug_buddy_branch
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository
 from bug_buddy.snapshot import snapshot
@@ -62,6 +62,7 @@ def watch(repository: Repository, commit_only: bool):
     Watches the repository's filesystem for changes and records the changes.
     It also notifies the user when there is an update in the test output.
     '''
+    set_bug_buddy_branch(repository)
     logger.info('Starting BugBuddy watcher')
     event_handler = ChangeWatchdog(repository, commit_only)
     observer = Observer()

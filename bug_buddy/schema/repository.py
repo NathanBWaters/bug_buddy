@@ -48,6 +48,9 @@ class Repository(Base):
     # the directory that contains the src files
     src_directory = Column(String(500), nullable=False)
 
+    # files that we do not care when they update
+    _ignored_files = Column(String(500), nullable=False)
+
     commits = relationship(
         'Commit',
         back_populates='repository',
@@ -70,7 +73,8 @@ class Repository(Base):
                  initialize_commands: str,
                  test_commands: str,
                  src_directory: str,
-                 mirror_path: str=None):
+                 mirror_path: str=None,
+                 ignored_files: str=None):
         '''
         Creates a new Repository instance.
         '''
@@ -81,6 +85,7 @@ class Repository(Base):
         self.original_path = os.path.abspath(src_path)
         self._mirror_path = mirror_path or self.mirror_path
         self.src_directory = src_directory
+        self._ignored_files = ignored_files
 
     @property
     def src_path(self):
@@ -128,6 +133,13 @@ class Repository(Base):
                 repository_files.append(absolute_path)
 
         return repository_files
+
+    @property
+    def ignored_files(self):
+        '''
+        A split version of the ignored files
+        '''
+        return self._ignored_files.split(',') if self._ignored_files else []
 
     @property
     def base_synthetic_commits(self):
