@@ -127,7 +127,7 @@ class FunctionHistory(Base):
         logger.info('Added "{statement}" to {file} | {function_name}@{lineno}'
                     .format(statement=statement,
                             file=self.function.file_path,
-                            function_name=self.ast_node.name,
+                            function_name=self.node.name,
                             lineno=first_line_in_function))
 
         return first_line_in_function
