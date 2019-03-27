@@ -74,6 +74,4 @@ class Function(Base):
         '''
         return ('<Function {name} | {file} | {first_line}-{last_line} />'
                 .format(name=self.name,
-                        file=self.file_path,
-                        first_line=self.first_line,
-                        last_line=self.last_line))
+                        file=self.file_path))
