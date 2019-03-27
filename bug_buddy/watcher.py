@@ -36,8 +36,6 @@ class ChangeWatchdog(PatternMatchingEventHandler):
         if '/.' in event.src_path:
             return
 
-        print('{} event: {}'.format(self.repository.name, event))
-
         updated_file = os.path.relpath(event.src_path,
                                        self.repository.original_path)
         if (not updated_file or updated_file in self.repository.ignored_files or
