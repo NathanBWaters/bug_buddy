@@ -6,8 +6,8 @@ NOT CURRENTLY USED
 '''
 import ast
 import astor
-import pickle
 import os
+import pickle
 from sqlalchemy import Column, ForeignKey, Integer, Boolean, String
 from sqlalchemy.orm import relationship
 
