@@ -100,6 +100,8 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
         # create the synthetic diffs
         create_synthetic_alterations(repository)
 
+        exit()
+
         synthetic_diffs = repository.get_synthetic_diffs()
 
     num_runs = 0
