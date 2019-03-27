@@ -71,7 +71,7 @@ class FunctionHistory(Base):
         '''
         Returns the absolute path
         '''
-        return os.path.join(self.repository.path, self.function.file_path)
+        return os.path.join(self.function.repository.path, self.function.file_path)
 
     def remove_line(self, line):
         '''
