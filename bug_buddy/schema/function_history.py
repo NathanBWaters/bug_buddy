@@ -65,6 +65,13 @@ class FunctionHistory(Base):
         self.first_line = first_line
         self.last_line = last_line
 
+    @property
+    def abs_path(self):
+        '''
+        Returns the absolute path
+        '''
+        return os.path.join(self.repository.path, self.function.file_path)
+
     def remove_line(self, line):
         '''
         Removes a particular line from the function
