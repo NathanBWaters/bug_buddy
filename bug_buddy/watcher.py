@@ -44,7 +44,6 @@ class ChangeWatchdog(PatternMatchingEventHandler):
         if updated_file in self.repository.ignored_files:
             logger.info('Ingoring update to {}'.format(updated_file))
 
-
         # make sure there is an actual change recognized by git
         if not is_repo_clean(self.repository,
                              path=self.repository.original_path):

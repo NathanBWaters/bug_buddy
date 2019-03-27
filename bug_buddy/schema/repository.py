@@ -78,14 +78,14 @@ class Repository(Base):
         '''
         Creates a new Repository instance.
         '''
-        self.name = name
-        self.url = url
-        self.initialize_commands = initialize_commands
-        self.test_commands = test_commands
+        self.name = name.strip()
+        self.url = url.strip()
+        self.initialize_commands = initialize_commands.strip()
+        self.test_commands = test_commands.strip()
         self.original_path = os.path.abspath(src_path)
         self._mirror_path = mirror_path or self.mirror_path
-        self.src_directory = src_directory
-        self._ignored_files = ignored_files
+        self.src_directory = src_directory.strip()
+        self._ignored_files = ignored_files.strip()
 
     @property
     def src_path(self):
