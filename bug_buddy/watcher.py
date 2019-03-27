@@ -37,7 +37,12 @@ class ChangeWatchdog(PatternMatchingEventHandler):
             return
 
         print('{} event: {}'.format(self.repository.name, event))
-        import pdb; pdb.set_trace()
+
+        updated_file = os.path.relpath(event.src_path,
+                                       self.repository.original_path)
+        if updated_file in self.repository.ignored_files:
+            logger.info('Ingoring update to {}'.format(updated_file))
+
 
         # make sure there is an actual change recognized by git
         if not is_repo_clean(self.repository,
