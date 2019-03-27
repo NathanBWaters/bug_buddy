@@ -113,7 +113,7 @@ def sync_mirror_repo(repository: Repository):
                .format(source=repository.original_path,
                        destination=repository.mirror_path))
 
-    run_cmd(repository, command, log=True)
+    run_cmd(repository, command, log=False)
 
 
 def get_diff_patches(commit: Commit=None,
