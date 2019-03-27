@@ -232,10 +232,10 @@ def create_synthetic_diff_for_node(repository: Repository,
         function=function,
         commit=commit,
         node=node,
-        first_line=function.first_line,
+        first_line=node.first_line,
         # we need the minus 1 because when we complete the commit the
         # 'assert False' line will have been removed
-        last_line=function.last_line - 1,
+        last_line=node.last_line - 1,
     )
 
     logger.info('There is a new function: {}'.format(function))
