@@ -45,12 +45,13 @@ class Function(Base):
     def __init__(self,
                  repository,  # Repository - need to figure out typing for
                               # in cases where they both refer to each other
+                 name: str,
                  file_path: str):
         '''
         Creates a new Function instance.
         '''
         self.repository = repository
-        self.name = node.name
+        self.name = name
         self.file_path = file_path
 
     @property
