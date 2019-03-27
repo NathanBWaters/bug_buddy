@@ -72,6 +72,6 @@ class Function(Base):
         '''
         Converts the Function into a string
         '''
-        return ('<Function {name} | {file} | {first_line}-{last_line} />'
+        return ('<Function {name} | {file} />'
                 .format(name=self.name,
                         file=self.file_path))
