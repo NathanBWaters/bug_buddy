@@ -220,13 +220,7 @@ def create_synthetic_diff_for_node(repository: Repository,
     '''
     session = Session.object_session(repository)
 
-    # create the function instance
-    function = create(
-        session,
-        Function,
-        repository=repository,
-        node=node,
-        file_path=node.file_path)
+    function = commit.get_function_for_node(node).function
 
     # create the function history instance
     create(
