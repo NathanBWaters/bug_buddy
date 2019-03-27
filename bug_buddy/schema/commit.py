@@ -168,7 +168,11 @@ class Commit(Base):
         '''
         Given a node it will return the corresponding function history
         '''
-
+        return self.get_corresponding_function(
+            file_path=node.file_path,
+            start_range=node.first_line,
+            end_range=node.last_line
+        )
 
     @property
     def blames(self):
