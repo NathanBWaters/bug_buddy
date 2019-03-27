@@ -80,13 +80,6 @@ class Function(Base):
         '''
         return self.function_history[0]
 
-    def has_line_info(self):
-        '''
-        Returns whether or not the function can return representative line
-        information
-        '''
-        return self.loaded_node() or len(self.function_history) > 0
-
     @property
     def abs_path(self):
         '''
