@@ -93,7 +93,7 @@ class FunctionHistory(Base):
 
         # Get the first node in the function, which is it's first statement.
         # We will add the statement here
-        first_node = self.ast_node.body[0]
+        first_node = self.node.body[0]
         first_line_in_function = first_node.lineno
 
         # scoot down one function if the first node is a comment
@@ -103,7 +103,7 @@ class FunctionHistory(Base):
         # note that a comment after the function does not seem to have a
         # column offset, and instead returns -1.
         column_offset = (first_node.col_offset if first_node.col_offset != -1
-                         else self.ast_node.col_offset + 4)
+                         else self.node.col_offset + 4)
         indentation = ' ' * column_offset
         indented_statement = indentation + statement + '\n'
 
