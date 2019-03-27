@@ -40,7 +40,7 @@ class ChangeWatchdog(PatternMatchingEventHandler):
 
         updated_file = os.path.relpath(event.src_path,
                                        self.repository.original_path)
-        if updated_file in self.repository.ignored_files:
+        if not updated_file or updated_file in self.repository.ignored_files:
             logger.info('Ingoring update to {}'.format(updated_file))
             return
 

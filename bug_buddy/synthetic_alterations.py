@@ -46,6 +46,7 @@ from bug_buddy.errors import UserError
 from bug_buddy.git_utils import (
     create_commit,
     create_reset_commit,
+    get_previous_commit,
     git_push,
     is_repo_clean,
     revert_unstaged_changes,
@@ -221,8 +222,8 @@ def create_synthetic_diff_for_node(repository: Repository,
     '''
     session = Session.object_session(repository)
 
-    previous_commit = 
-    function = commit.get_function_for_node(node).function
+    previous_commit = get_previous_commit(commit)
+    function = previous_commit.get_function_for_node(node).function
 
     # create the function history instance
     create(
