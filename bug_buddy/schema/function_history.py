@@ -61,6 +61,7 @@ class FunctionHistory(Base):
         self.function = function
         self.commit = commit
         self.source_code = astor.to_source(node)
+        self.node = node
         self.first_line = first_line
         self.last_line = last_line
 
