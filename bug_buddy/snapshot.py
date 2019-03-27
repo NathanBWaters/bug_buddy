@@ -253,7 +253,6 @@ def create_new_functions_from_nodes(commit: Commit, function_nodes):
             session,
             Function,
             repository=commit.repository,
-            node=node,
             file_path=node.file_path)
 
         # We have a new function!
