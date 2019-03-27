@@ -208,7 +208,7 @@ def create_synthetic_alterations(repository: Repository):
             commit,
             node)
 
-    git_push(commit)
+    git_push(repository)
 
     # We want to checkpoint here in case it fails.  Greating synthetic
     # can take a while
