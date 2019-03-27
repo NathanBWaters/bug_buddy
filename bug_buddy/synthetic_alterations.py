@@ -258,9 +258,6 @@ def create_synthetic_diff_for_node(repository: Repository,
         diff = diffs[0]
         logger.info('Created diff: {}'.format(diff))
 
-        # this is the function's synthetic diff
-        function.synthetic_diff = diff
-
         # go back to a clean repository
         revert_diff(diff)
 
