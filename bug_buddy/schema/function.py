@@ -88,32 +88,6 @@ class Function(Base):
         return self.loaded_node() or len(self.function_history) > 0
 
     @property
-    def first_line(self):
-        '''
-        Returns the first line in the function
-        '''
-        if self.has_line_info():
-            if self.loaded_node():
-                return self.ast_node.lineno
-
-            return self.latest_history.first_line
-
-        return -1
-
-    @property
-    def last_line(self):
-        '''
-        Returns the last line in the function
-        '''
-        if self.has_line_info():
-            if self.loaded_node():
-                return self.ast_node.body[-1].lineno
-
-            return self.latest_history.last_line
-
-        return -1
-
-    @property
     def abs_path(self):
         '''
         Returns the absolute path
