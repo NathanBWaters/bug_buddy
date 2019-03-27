@@ -240,7 +240,7 @@ def create_synthetic_diff_for_node(repository: Repository,
 
     logger.info('There is a new function history: {}'.format(function_history))
 
-    added_line = function.prepend_statement('assert False')
+    added_line = function_history.prepend_statement('assert False')
 
     if library_is_testable(repository):
         # create a new diff from this one change
@@ -263,6 +263,6 @@ def create_synthetic_diff_for_node(repository: Repository,
 
     else:
         # remove the addition from the source code
-        function.remove_line(added_line)
+        function_history.remove_line(added_line)
 
     return node
