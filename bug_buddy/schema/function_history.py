@@ -82,7 +82,7 @@ class FunctionHistory(Base):
 
         content = contents.pop(line - 1)
         logger.info('Removed line: "{}" from {}'
-                    .format(content.strip(), self.file_path))
+                    .format(content.strip(), self.function.file_path))
 
         with open(self.abs_path, 'w') as f:
             f.writelines(contents)
