@@ -46,7 +46,7 @@ class ChangeWatchdog(PatternMatchingEventHandler):
         # we have to recreate the repository in this thread for Sqlite
         with session_manager() as session:
             repository = get(session, Repository, id=self.repository.id)
-            logger.info('Syncing updates')
+            # logger.info('Syncing updates')
             # Copy the change over to the mirror repository
             sync_mirror_repo(repository)
 
