@@ -109,9 +109,9 @@ def sync_mirror_repo(repository: Repository):
         logger.info('Initializing mirror repository')
         clone_repository(repository, repository.mirror_path)
 
-    command = ('rsync -a {source} {destination} --exclude ".git"'
+    command = ('rsync -a {source}/ {destination} --exclude ".git"'
                .format(source=repository.original_path,
-                       destination=MIRROR_ROOT))
+                       destination=repository.mirror_path))
 
     run_cmd(repository, command, log=True)
 
@@ -248,7 +248,31 @@ def _match_patch_with_history(patch, function_histories: FunctionHistoryList):
             more_dog_stuff = 2
     '''
     for function_history in function_histories:
-        specific_changes = []
+        function_lines = list(range(function_history.first_line,
+                                    function_history.last_line))
+
+        # now remove the lines that are a part of a function that is within
+        # this function.  This an inner function and changes to that function
+        # should not relate to the patch for this function.
+        for other_history in function_histories:
+            if (other_history.first_line > function_history.first_line and
+                    other_history.last_line < function_history.last_line):
+                logger.info('{} is an inner function of {}'
+                            .format(other_history, function_history))
+
+                inner_func_lines = list(range(other_history.first_line,
+                                              other_history.last_line))
+
+                # remove the inner function lines from the list of lines in the
+                # patch that maps to this function
+                function_lines = [line for line in function_lines
+                                  if line not in inner_func_lines]
+
+        function_changes = []
+        for original_line, new_line, change in patch.changes:
+            if new_line in function_lines:
+                pass
+
 
         # for change in pat
 

@@ -37,6 +37,7 @@ class ChangeWatchdog(PatternMatchingEventHandler):
             return
 
         print('{} event: {}'.format(self.repository.name, event))
+
         # make sure there is an actual change recognized by git
         if not is_repo_clean(self.repository,
                              path=self.repository.original_path):
@@ -46,7 +47,7 @@ class ChangeWatchdog(PatternMatchingEventHandler):
                 repository = get(session, Repository, id=self.repository.id)
                 logger.info('Updating the mirror repository')
                 # Copy the change over to the mirror repository
-                sync_mirror_repo(repository,)
+                sync_mirror_repo(repository)
 
                 # make sure the repository is on the bug_buddy branch
                 commit = snapshot(repository, commit_only=self.commit_only)

@@ -92,15 +92,15 @@ def delete_command(src_path: str):
     with session_manager() as session:
         repository = get(session, Repository, url=url)
 
-        msg = ('Are you sure you want to delete {}?\n'
-               'This will delete the bug_buddy branch and all data associated '
-               'with this project from the database.  (y/n)\n'
-               .format(src_path))
-        should_delete = input(msg)
+        # make sure you cannot delete the bug_buddy branch
+        if repository.name != 'bug_buddy':
+            msg = ('Would you like to delete the bug_buddy branch for {}?\n'
+                   '(y/n)\n'.format(repository))
+            should_delete = input(msg)
 
-        if is_affirmative(should_delete):
-            logger.info('Deleting bug_buddy branch')
-            delete_bug_buddy_branch(repository or Mock(src_path=src_path))
+            if is_affirmative(should_delete):
+                logger.info('Deleting bug_buddy branch')
+                delete_bug_buddy_branch(repository or Mock(src_path=src_path))
 
         if repository:
             logger.info('Deleting data from the database')

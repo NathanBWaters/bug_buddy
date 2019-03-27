@@ -41,7 +41,7 @@ PREVIOUS_HISTORY = 'PREVIOUS_HISTORY'
 CURRENT_NODE = 'CURRENT_NODE'
 
 
-def snapshot(repository: Repository, allow_empty=False):
+def snapshot(repository: Repository, allow_empty=False, commit_only=False):
     '''
     Snapshots a dirty commit tree and records everything
     '''
@@ -53,7 +53,8 @@ def snapshot(repository: Repository, allow_empty=False):
                                commit_type=DEVELOPER_CHANGE,
                                allow_empty=allow_empty)
 
-        snapshot_commit(repository, commit)
+        if not commit_only:
+            snapshot_commit(repository, commit)
 
         git_push(repository)
 

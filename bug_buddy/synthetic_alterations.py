@@ -189,6 +189,7 @@ def create_synthetic_alterations(repository: Repository):
     @param repository: the code base we are changing
     @param commit: the empty commit we're adding changes to
     '''
+    session = Session.object_session(repository)
     # create an empty commit that the diffs will be added to
     commit = create_commit(
         repository,
@@ -204,6 +205,10 @@ def create_synthetic_alterations(repository: Repository):
             node)
 
     git_push(commit)
+
+    # We want to checkpoint here in case it fails.  Greating synthetic
+    # can take a while
+    session.commit()
 
 
 def create_synthetic_diff_for_node(repository: Repository,
