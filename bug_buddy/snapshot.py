@@ -41,7 +41,10 @@ PREVIOUS_HISTORY = 'PREVIOUS_HISTORY'
 CURRENT_NODE = 'CURRENT_NODE'
 
 
-def snapshot(repository: Repository, allow_empty=False, commit_only=False):
+def snapshot(repository: Repository,
+             commit_type=DEVELOPER_CHANGE,
+             allow_empty=False,
+             commit_only=False):
     '''
     Snapshots a dirty commit tree and records everything
     '''
@@ -50,7 +53,7 @@ def snapshot(repository: Repository, allow_empty=False, commit_only=False):
         session = Session.object_session(repository)
 
         commit = create_commit(repository,
-                               commit_type=DEVELOPER_CHANGE,
+                               commit_type=commit_type,
                                allow_empty=allow_empty)
 
         if not commit_only:
