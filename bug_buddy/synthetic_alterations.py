@@ -70,7 +70,7 @@ from bug_buddy.source import (
     revert_diff)
 
 
-def yield_blame_set(synthetic_diffs: Repository):
+def yield_blame_set(synthetic_diffs: DiffList):
     '''
     Returns a set of diffs.
 
