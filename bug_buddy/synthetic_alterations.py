@@ -130,7 +130,8 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                     commit = create_commit(repository,
                                            commit_type=SYNTHETIC_CHANGE,
                                            allow_empty=True)
-                    # apply the synthetic diffs
+
+                    # apply the synthetic diffs to the mirrored repository
                     for diff in diff_subset:
                         apply_diff(diff)
 
