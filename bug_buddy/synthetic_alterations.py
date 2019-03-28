@@ -125,21 +125,19 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                     # revert back to a clean repository
                     create_reset_commit(repository)
 
-                    # create a commit.  Only allow an empty commit if there
-                    # nothing in the diff
-                    commit = create_commit(repository,
-                                           commit_type=SYNTHETIC_CHANGE,
-                                           allow_empty=True)
-
                     # apply the synthetic diffs to the mirrored repository
                     for diff in diff_subset:
                         apply_diff(diff)
 
-                    # save the diffs with the commit
-                    # TODO - need to recreate the diffs but now they're tied to
-                    # the correct commit
-                    raise Exception('Yeah you need to save the diffs against '
-                                    'the commit')
+                    # create a commit.  Only allow an empty commit if there
+                    # nothing in the diff
+                    commit = snapshot(repository,
+                                      commit_type=SYNTHETIC_CHANGE,
+                                      allow_empty=True)
+
+
+                    # snapshot the commit
+
 
                 # add the commit hash id for its synthetic diffs
                 if not commit.synthetic_diff_hash:
