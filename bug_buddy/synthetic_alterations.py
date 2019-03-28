@@ -125,8 +125,8 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                     # revert back to a clean repository
                     create_reset_commit(repository)
 
-                    # create a commit.  Only allow an empty commit if there nothing
-                    # in the diff
+                    # create a commit.  Only allow an empty commit if there
+                    # nothing in the diff
                     commit = create_commit(repository,
                                            commit_type=SYNTHETIC_CHANGE,
                                            allow_empty=True)
