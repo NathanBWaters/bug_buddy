@@ -135,10 +135,6 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                                       commit_type=SYNTHETIC_CHANGE,
                                       allow_empty=True)
 
-
-                    # snapshot the commit
-
-
                 # add the commit hash id for its synthetic diffs
                 if not commit.synthetic_diff_hash:
                     commit.synthetic_diff_hash = get_diff_set_hash(diff_subset)
