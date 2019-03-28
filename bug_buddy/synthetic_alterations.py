@@ -95,7 +95,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
     '''
     session = Session.object_session(repository)
     synthetic_diffs = repository.get_synthetic_diffs()
-    import pdb; pdb.set_trace()
+    logger.info('synthetic_diffs: {}'.format(synthetic_diffs))
 
     if not synthetic_diffs:
         # create the synthetic diffs
