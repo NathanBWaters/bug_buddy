@@ -216,6 +216,8 @@ def apply_synthetic_diff(diff: Diff):
     created diff
     '''
     assert False, 'implement me!'
+
+
 def create_synthetic_diff_for_node(repository: Repository,
                                    commit: Commit,
                                    node):
