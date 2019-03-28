@@ -34,17 +34,19 @@ from bug_buddy.blaming import (
     powerset,
     synthetic_blame,
     get_diff_set_hash)
-from bug_buddy.constants import (BASE_SYNTHETIC_CHANGE,
-                                 BENIGN_STATEMENT,
-                                 ERROR_STATEMENT,
-                                 PYTHON_FILE_TYPE,
-                                 SYNTHETIC_CHANGE,
-                                 SYNTHETIC_FIXING_CHANGE)
+from bug_buddy.constants import (
+    BASE_SYNTHETIC_CHANGE,
+    BENIGN_STATEMENT,
+    ERROR_STATEMENT,
+    PYTHON_FILE_TYPE,
+    SYNTHETIC_CHANGE,
+    SYNTHETIC_FIXING_CHANGE)
 from bug_buddy.db import session_manager, Session, create
 from bug_buddy.errors import UserError
 from bug_buddy.git_utils import (
     create_commit,
     create_reset_commit,
+    get_previous_commit,
     git_push,
     is_repo_clean,
     revert_unstaged_changes,
@@ -97,6 +99,8 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
     if not synthetic_diffs:
         # create the synthetic diffs
         create_synthetic_alterations(repository)
+        logger.info('You have created the synthetic commits.  Congrats!')
+        exit()
 
         synthetic_diffs = repository.get_synthetic_diffs()
 
@@ -204,7 +208,7 @@ def create_synthetic_alterations(repository: Repository):
             commit,
             node)
 
-    git_push(commit)
+    git_push(repository)
 
     # We want to checkpoint here in case it fails.  Greating synthetic
     # can take a while
@@ -220,30 +224,25 @@ def create_synthetic_diff_for_node(repository: Repository,
     '''
     session = Session.object_session(repository)
 
-    # create the function instance
-    function = create(
-        session,
-        Function,
-        repository=repository,
-        node=node,
-        file_path=node.file_path)
+    previous_commit = get_previous_commit(commit)
+    function = previous_commit.get_function_for_node(node).function
 
     # create the function history instance
-    create(
+    function_history = create(
         session,
         FunctionHistory,
         function=function,
         commit=commit,
         node=node,
-        first_line=function.first_line,
+        first_line=node.first_line,
         # we need the minus 1 because when we complete the commit the
         # 'assert False' line will have been removed
-        last_line=function.last_line - 1,
+        last_line=node.last_line - 1,
     )
 
-    logger.info('There is a new function: {}'.format(function))
+    logger.info('There is a new function history: {}'.format(function_history))
 
-    added_line = function.prepend_statement('assert False')
+    added_line = function_history.prepend_statement('assert False')
 
     if library_is_testable(repository):
         # create a new diff from this one change
@@ -261,14 +260,11 @@ def create_synthetic_diff_for_node(repository: Repository,
         diff = diffs[0]
         logger.info('Created diff: {}'.format(diff))
 
-        # this is the function's synthetic diff
-        function.synthetic_diff = diff
-
         # go back to a clean repository
         revert_diff(diff)
 
     else:
         # remove the addition from the source code
-        function.remove_line(added_line)
+        function_history.remove_line(added_line)
 
     return node

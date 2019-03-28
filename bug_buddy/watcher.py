@@ -36,18 +36,22 @@ class ChangeWatchdog(PatternMatchingEventHandler):
         if '/.' in event.src_path:
             return
 
-        print('{} event: {}'.format(self.repository.name, event))
+        updated_file = os.path.relpath(event.src_path,
+                                       self.repository.original_path)
+        if (not updated_file or updated_file in self.repository.ignored_files or
+                not updated_file.endswith('.py')):
+            logger.info('Ignoring update to {}'.format(updated_file))
+            return
 
-        # make sure there is an actual change recognized by git
-        if not is_repo_clean(self.repository,
-                             path=self.repository.original_path):
+        # we have to recreate the repository in this thread for Sqlite
+        with session_manager() as session:
+            repository = get(session, Repository, id=self.repository.id)
+            # logger.info('Syncing updates')
+            # Copy the change over to the mirror repository
+            sync_mirror_repo(repository)
 
-            # we have to recreate the repository in this thread for Sqlite
-            with session_manager() as session:
-                repository = get(session, Repository, id=self.repository.id)
-                logger.info('Updating the mirror repository')
-                # Copy the change over to the mirror repository
-                sync_mirror_repo(repository)
+            if not is_repo_clean(self.repository):
+                logger.info('Valid change event: {}'.format(event))
 
                 # make sure the repository is on the bug_buddy branch
                 commit = snapshot(repository, commit_only=self.commit_only)
@@ -55,6 +59,8 @@ class ChangeWatchdog(PatternMatchingEventHandler):
 
                 # run the tests in a appropriate order
                 session.commit()
+            else:
+                logger.info('Nothing was changed')
 
 
 def watch(repository: Repository, commit_only: bool):

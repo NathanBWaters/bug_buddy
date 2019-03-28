@@ -164,6 +164,16 @@ class Commit(Base):
 
         return matching_function
 
+    def get_function_for_node(self, node):
+        '''
+        Given a node it will return the corresponding function history
+        '''
+        return self.get_corresponding_function(
+            file_path=node.file_path,
+            start_range=node.first_line,
+            end_range=node.last_line
+        )
+
     @property
     def blames(self):
         '''
