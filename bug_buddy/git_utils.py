@@ -103,6 +103,12 @@ def get_branch_name(repository: Repository) -> str:
     return branch_name.decode("utf-8").strip()
 
 
+def git_add(repository: Repository):
+    '''
+    Stages the changes
+    '''
+    Git(repository.path).add('-A')
+
 def create_commit(repository: Repository,
                   name: str=None,
                   commit_type: str=DEVELOPER_CHANGE,
