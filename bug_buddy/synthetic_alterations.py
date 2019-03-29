@@ -30,7 +30,6 @@ from typing import List
 
 from bug_buddy.schema.aliases import DiffList
 from bug_buddy.blaming import (
-    get_matching_commit_for_diffs,
     powerset,
     synthetic_blame,
     get_diff_set_hash)
@@ -219,6 +218,14 @@ def create_synthetic_alterations(repository: Repository):
     # can take a while
     session.commit()
 
+
+def get_matching_commit_for_diffs(repository, diff_set):
+    '''
+    Given a set of diffs, return if there is a commit that has those diffs
+    '''
+    session = Session.object_session(repository)
+    diff_hash = get_diff_set_hash(diff_set)
+    return get(session, Commit, synthetic_diff_hash=diff_hash)
 
 def apply_synthetic_diffs(commit: Commit, diff_subset: DiffList):
     '''
