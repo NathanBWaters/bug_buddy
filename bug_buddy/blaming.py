@@ -135,8 +135,8 @@ def get_diff_set_hash(diffs: DiffList):
     '''
     Given a list of diffs, return the hash
     '''
-    diff_patches = [diff.patch for diff in diffs]
-    diff_patches.sort()
+    base_ids = [diff.base_synthetic_diff_id for diff in diffs]
+    base_ids.sort()
     return hash(frozenset(diff_patches))
 
 
