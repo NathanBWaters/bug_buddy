@@ -123,7 +123,7 @@ def create_commit(repository: Repository,
     @param empty: whether or not the commit is empty
     '''
     commit_name = name or 'bug_buddy_commit'
-    Git(repository.path).add('-A')
+    git_add(repository)
 
     # You should only create commits on the "bug_buddy" branch
 
