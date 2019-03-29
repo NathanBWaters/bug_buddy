@@ -159,6 +159,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                 logger.debug('3: {}'.format(time.time()))
                 session.commit()
 
+                import pdb; pdb.set_trace()
                 # push newly created commit
                 # git_push(repository)
 
