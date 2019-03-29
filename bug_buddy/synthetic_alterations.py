@@ -231,6 +231,8 @@ def apply_synthetic_diff(commit: Commit, diff_subset: DiffList):
                'The diffs are: {}'.format(new_diffs))
         assert len(new_diffs) == 1, msg
 
+        new_diff = new_diffs[0]
+        new_diff.base_synthetic_diff = base_synthetic_diff.id
         save_diffs(commit.repository, commit, new_diffs)
 
 
