@@ -227,6 +227,7 @@ def get_matching_commit_for_diffs(repository, diff_set):
     diff_hash = get_diff_set_hash(diff_set)
     return get(session, Commit, synthetic_diff_hash=diff_hash)
 
+
 def apply_synthetic_diffs(commit: Commit, diff_subset: DiffList):
     '''
     Creates a new diff from the base synthetic diff.  It then stores the newly
