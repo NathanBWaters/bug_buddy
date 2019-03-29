@@ -41,6 +41,7 @@ class Diff(Base):
         Integer,
         ForeignKey('diff.id'),
         nullable=True)
+    base_synthetic_diff = Column('Diff')
 
     # The patch stores the diff information in a universally accessible way.
     # When we are reverting a diff, we can use the patch to revert in a
