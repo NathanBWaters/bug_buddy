@@ -109,6 +109,7 @@ def git_add(repository: Repository):
     '''
     Git(repository.path).add('-A')
 
+
 def create_commit(repository: Repository,
                   name: str=None,
                   commit_type: str=DEVELOPER_CHANGE,
