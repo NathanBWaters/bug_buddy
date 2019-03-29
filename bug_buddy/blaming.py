@@ -133,7 +133,8 @@ def get_matching_commit_for_diffs(repository, diff_set):
 
 def get_diff_set_hash(diffs: DiffList):
     '''
-    Given a list of diffs, return the hash
+    Given a list of diffs, return the hash which is consisted of an ordered
+    set of base synthetic commit ids
     '''
     base_ids = [diff.base_synthetic_diff_id for diff in diffs]
     base_ids.sort()
