@@ -112,7 +112,7 @@ def snapshot_diffs(commit: Commit):
     diffs = create_diffs(commit.repository, commit)
 
     # save the diffs
-    save_diffs(repository, commit, diffs)
+    save_diffs(commit.repository, commit, diffs)
 
 
 def save_function_histories(repository: Repository,
