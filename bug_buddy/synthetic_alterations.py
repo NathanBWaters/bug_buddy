@@ -230,6 +230,7 @@ def apply_synthetic_diff(commit: Commit, diff_subset: DiffList):
         msg = ('More than one diff created in the apply_synthetic_diff step. '
                'The diffs are: {}'.format(new_diffs))
         assert len(new_diffs) == 1, msg
+
         new_diff = save_diffs(commit.repository, commit, new_diffs)[0]
 
 
