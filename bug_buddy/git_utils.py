@@ -267,7 +267,9 @@ def get_previous_commit(commit: Commit):
     Returns the commit id created right before the provided commit
     '''
     previous_commit_id = get_previous_commit_id(commit)
-    return get(Session.object_session(commit), Commit, commit_id=previous_commit_id)
+    return get(Session.object_session(commit),
+               Commit,
+               commit_id=previous_commit_id)
 
 
 def get_previous_commit_id(commit: Commit):
@@ -310,9 +312,9 @@ def create_reset_commit(repository: Repository):
     # when nothing is altered/staged would error.  Therefore, we have to make
     # sure the repo is dirty before we make a commit.
     if not is_repo_clean(repository):
-        create_commit(repository,
-                      'reset_commit',
-                      commit_type=SYNTHETIC_RESET_CHANGE)
+        return create_commit(repository,
+                             'reset_commit',
+                             commit_type=SYNTHETIC_RESET_CHANGE)
     else:
         logger.info('Did not need to create reset commit since the repo is '
                     'clean.')

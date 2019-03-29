@@ -123,7 +123,10 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                                 .format(diff_subset))
 
                     # revert back to a clean repository
-                    create_reset_commit(repository)
+                    reset_commit = create_reset_commit(repository)
+                    if reset_commit:
+                        logger.info('Storing reset commit')
+                        snapshot_commit(repository, reset_commit)
 
                     # create a commit.  Only allow an empty commit if there
                     # nothing in the diff

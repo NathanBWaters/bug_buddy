@@ -57,7 +57,7 @@ def snapshot(repository: Repository,
                                allow_empty=allow_empty)
 
         if not commit_only:
-            snapshot_commit(repository, commit)
+            commit = snapshot_commit(repository, commit)
 
         git_push(repository)
 
@@ -107,6 +107,8 @@ def snapshot_commit(repository: Repository, commit: Commit, skip_diffs=False):
 
         # save the diffs
         save_diffs(repository, commit, diffs)
+
+    return commit
 
 
 def save_function_histories(repository: Repository,

@@ -122,15 +122,6 @@ def synthetic_blame(commit: Commit,
     logger.info('Completed blaming for {}'.format(commit))
 
 
-def get_matching_commit_for_diffs(repository, diff_set):
-    '''
-    Given a set of diffs, return if there is a commit that has those diffs
-    '''
-    session = Session.object_session(repository)
-    diff_hash = get_diff_set_hash(diff_set)
-    return get(session, Commit, synthetic_diff_hash=diff_hash)
-
-
 def get_diff_set_hash(diffs: DiffList):
     '''
     Given a list of diffs, return the hash which is consisted of an ordered
