@@ -63,7 +63,7 @@ from bug_buddy.schema import (
     FunctionHistory,
     Repository,
     TestRun)
-from bug_buddy.snapshot import snapshot, create_diffs
+from bug_buddy.snapshot import snapshot, create_diffs, save_diffs
 from bug_buddy.source import (
     apply_diff,
     get_function_nodes_from_repo,
