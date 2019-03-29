@@ -30,7 +30,6 @@ from typing import List
 
 from bug_buddy.schema.aliases import DiffList
 from bug_buddy.blaming import (
-    get_matching_commit_for_diffs,
     powerset,
     synthetic_blame,
     get_diff_set_hash)
