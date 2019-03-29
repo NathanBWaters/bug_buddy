@@ -104,7 +104,10 @@ def snapshot_commit(repository: Repository, commit: Commit):
     snapshot_diffs(commit)
 
 
-def snapshot_diffs(commit: Commit)
+def snapshot_diffs(commit: Commit):
+    '''
+    Creates and saves the diff instances
+    '''
     # create Diff instances
     diffs = create_diffs(commit.repository, commit)
 
