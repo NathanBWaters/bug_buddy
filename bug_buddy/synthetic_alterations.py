@@ -216,7 +216,7 @@ def create_synthetic_alterations(repository: Repository):
     session.commit()
 
 
-def apply_synthetic_diff(base_synthetic_diff: Diff):
+def apply_synthetic_diff(commit: Commit, base_synthetic_diff: Diff):
     '''
     Creates a new diff from the base synthetic diff.  It then stores the newly
     created diff
