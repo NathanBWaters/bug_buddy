@@ -135,7 +135,8 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                     apply_synthetic_diffs(commit, diff_subset)
 
                     # store the rest of the commit data.  No need to recreate
-                    # the diffs
+                    # the diffs since they have already been stored in
+                    # apply_synthetic_diffs
                     commit = snapshot_commit(
                         repository,
                         commit,
