@@ -237,7 +237,7 @@ def apply_synthetic_diff(commit: Commit, diff_subset: DiffList):
 
         # Now add the update to change to the commit so it is not noticed
         # in the next diff creation
-        update_commit(repository)
+        update_commit(commit.repository)
 
 
 def create_synthetic_diff_for_node(repository: Repository,
