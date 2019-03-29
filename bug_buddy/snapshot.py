@@ -77,7 +77,7 @@ def snapshot(repository: Repository,
         raise e
 
 
-def snapshot_commit(repository: Repository, commit: Commit):
+def snapshot_commit(repository: Repository, commit: Commit, skip_diffs=False):
     '''
     Given a repository and commit, store the necessary data such as the
     Functions, FunctionHistory, and Diff instances.
