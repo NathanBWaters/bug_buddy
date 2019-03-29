@@ -134,8 +134,8 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                     # apply the synthetic diffs to the mirrored repository
                     apply_synthetic_diffs(commit, diff_subset)
 
-                    # create a commit.  Only allow an empty commit if there
-                    # nothing in the diff
+                    # store the rest of the commit data.  No need to recreate
+                    # the diffs
                     commit = snapshot_commit(
                         repository,
                         commit,
