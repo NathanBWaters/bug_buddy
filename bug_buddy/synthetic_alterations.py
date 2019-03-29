@@ -100,7 +100,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
     if not synthetic_diffs:
         # create the synthetic diffs
         create_synthetic_alterations(repository)
-        logger.info('You have created the synthetic commits.  Congrats!')
+        logger.info('You have created the base synthetic commits.  Congrats!')
         exit()
 
     num_runs = 0
