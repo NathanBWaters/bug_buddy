@@ -231,7 +231,7 @@ def apply_synthetic_diff(commit: Commit, diff_subset: DiffList):
                'The diffs are: {}'.format(new_diffs))
         assert len(new_diffs) == 1, msg
 
-        new_diff = save_diffs(commit.repository, commit, new_diffs)
+        save_diffs(commit.repository, commit, new_diffs)
 
 
 def create_synthetic_diff_for_node(repository: Repository,
