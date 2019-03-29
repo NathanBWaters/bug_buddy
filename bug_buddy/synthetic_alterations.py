@@ -132,7 +132,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                                            allow_empty=True)
 
                     # apply the synthetic diffs to the mirrored repository
-                    apply_synthetic_diff(commit, diff_subset)
+                    apply_synthetic_diffs(commit, diff_subset)
 
                     # create a commit.  Only allow an empty commit if there
                     # nothing in the diff
@@ -214,7 +214,7 @@ def create_synthetic_alterations(repository: Repository):
     session.commit()
 
 
-def apply_synthetic_diff(commit: Commit, diff_subset: DiffList):
+def apply_synthetic_diffs(commit: Commit, diff_subset: DiffList):
     '''
     Creates a new diff from the base synthetic diff.  It then stores the newly
     created diff
