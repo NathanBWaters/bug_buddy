@@ -164,7 +164,7 @@ def update_commit(repository: Repository):
 
     @param repository: the repository with the commit to be updated
     '''
-    Git(repository.path).add('-A')
+    git_add(repository)
 
     # git commit --amend
     Git(repository.path).commit('--amend')
