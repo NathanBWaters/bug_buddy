@@ -63,14 +63,14 @@ from bug_buddy.schema import (
     FunctionHistory,
     Repository,
     TestRun)
-from bug_buddy.snapshot import snapshot_commit, create_diffs
+from bug_buddy.snapshot import snapshot_commit, create_diffs, save_diffs
 from bug_buddy.source import (
     apply_diff,
     get_function_nodes_from_repo,
     revert_diff)
 
 
-def yield_blame_set(synthetic_diffs: Repository):
+def yield_blame_set(synthetic_diffs: DiffList):
     '''
     Returns a set of diffs.
 
@@ -95,14 +95,13 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
     '''
     session = Session.object_session(repository)
     synthetic_diffs = repository.get_synthetic_diffs()
+    logger.info('synthetic_diffs: {}'.format(synthetic_diffs))
 
     if not synthetic_diffs:
         # create the synthetic diffs
         create_synthetic_alterations(repository)
         logger.info('You have created the synthetic commits.  Congrats!')
         exit()
-
-        synthetic_diffs = repository.get_synthetic_diffs()
 
     num_runs = 0
     for diff_set in yield_blame_set(synthetic_diffs):
@@ -126,20 +125,22 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                     # revert back to a clean repository
                     create_reset_commit(repository)
 
-                    # create a commit.  Only allow an empty commit if there nothing
-                    # in the diff
+                    # create a commit.  Only allow an empty commit if there
+                    # nothing in the diff
                     commit = create_commit(repository,
                                            commit_type=SYNTHETIC_CHANGE,
                                            allow_empty=True)
-                    # apply the synthetic diffs
-                    for diff in diff_subset:
-                        apply_diff(diff)
 
-                    # save the diffs with the commit
-                    # TODO - need to recreate the diffs but now they're tied to
-                    # the correct commit
-                    raise Exception('Yeah you need to save the diffs against '
-                                    'the commit')
+                    # apply the synthetic diffs to the mirrored repository
+                    apply_synthetic_diffs(commit, diff_subset)
+
+                    # store the rest of the commit data.  No need to recreate
+                    # the diffs since they have already been stored in
+                    # apply_synthetic_diffs
+                    commit = snapshot_commit(
+                        repository,
+                        commit,
+                        skip_diffs=True)
 
                 # add the commit hash id for its synthetic diffs
                 if not commit.synthetic_diff_hash:
@@ -158,6 +159,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                 logger.debug('3: {}'.format(time.time()))
                 session.commit()
 
+                import pdb; pdb.set_trace()
                 # push newly created commit
                 # git_push(repository)
 
@@ -213,6 +215,32 @@ def create_synthetic_alterations(repository: Repository):
     # We want to checkpoint here in case it fails.  Greating synthetic
     # can take a while
     session.commit()
+
+
+def apply_synthetic_diffs(commit: Commit, diff_subset: DiffList):
+    '''
+    Creates a new diff from the base synthetic diff.  It then stores the newly
+    created diff
+    '''
+    for base_synthetic_diff in diff_subset:
+        # create Diff instances
+        apply_diff(base_synthetic_diff)
+
+        # save the diffs
+        new_diffs = create_diffs(commit.repository, commit)
+
+        # there should only be one created
+        msg = ('More than one diff created in the apply_synthetic_diff step. '
+               'The diffs are: {}'.format(new_diffs))
+        assert len(new_diffs) == 1, msg
+
+        new_diff = new_diffs[0]
+        new_diff.base_synthetic_diff = base_synthetic_diff
+        save_diffs(commit.repository, commit, new_diffs)
+
+        # Now add the update to change to the commit so it is not noticed
+        # in the next diff creation
+        update_commit(commit.repository)
 
 
 def create_synthetic_diff_for_node(repository: Repository,

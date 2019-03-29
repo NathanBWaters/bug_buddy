@@ -103,6 +103,13 @@ def get_branch_name(repository: Repository) -> str:
     return branch_name.decode("utf-8").strip()
 
 
+def git_add(repository: Repository):
+    '''
+    Stages the changes
+    '''
+    Git(repository.path).add('-A')
+
+
 def create_commit(repository: Repository,
                   name: str=None,
                   commit_type: str=DEVELOPER_CHANGE,
@@ -116,7 +123,7 @@ def create_commit(repository: Repository,
     @param empty: whether or not the commit is empty
     '''
     commit_name = name or 'bug_buddy_commit'
-    Git(repository.path).add('-A')
+    git_add(repository)
 
     # You should only create commits on the "bug_buddy" branch
 
@@ -157,7 +164,7 @@ def update_commit(repository: Repository):
 
     @param repository: the repository with the commit to be updated
     '''
-    Git(repository.path).add('-A')
+    git_add(repository)
 
     # git commit --amend
     Git(repository.path).commit('--amend')

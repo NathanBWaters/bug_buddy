@@ -153,7 +153,6 @@ class Repository(Base):
         '''
         Returns the synthetic_diffs
         '''
-        [diff for commit in self.base_synthetic_commits for diff in commit.diffs]
         return [diff for commit in self.base_synthetic_commits
                 for diff in commit.diffs]
 
