@@ -40,7 +40,7 @@ from bug_buddy.constants import (
     PYTHON_FILE_TYPE,
     SYNTHETIC_CHANGE,
     SYNTHETIC_FIXING_CHANGE)
-from bug_buddy.db import session_manager, Session, create
+from bug_buddy.db import session_manager, Session, create, get
 from bug_buddy.errors import UserError
 from bug_buddy.git_utils import (
     create_commit,
