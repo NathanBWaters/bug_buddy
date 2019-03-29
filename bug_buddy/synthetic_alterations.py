@@ -220,14 +220,15 @@ def apply_synthetic_diff(commit: Commit, diff_subset: DiffList):
     created diff
     '''
     for base_synthetic_diff in diff_subset:
-        # I use the base synthetic diff and create a new diff.
-        apply_synthetic_diff(commit, base_synthetic_diff)
         # create Diff instances
+        apply_diff(base_synthetic_diff)
 
         # save the diffs
-        save_diffs(commit.repository, commit, diffs)
-        apply_diff(base_synthetic_diff)
-        diffs = create_diffs(commit.repository, commit)
+        new_diffs = create_diffs(commit.repository, commit)
+
+        # there should only be one created
+        assert len(new_diffs) == 1
+        new_diff = save_diffs(commit.repository, commit, new_diffs)[0]
 
 
 def create_synthetic_diff_for_node(repository: Repository,
