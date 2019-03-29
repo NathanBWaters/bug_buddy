@@ -102,10 +102,10 @@ def snapshot_commit(repository: Repository, commit: Commit):
     save_function_histories(repository, commit, function_nodes, patches)
 
     # create Diff instances
-    diffs = create_diffs(commit.repository, commit)
+    diffs = create_diffs(repository, commit)
 
     # save the diffs
-    save_diffs(commit.repository, commit, diffs)
+    save_diffs(repository, commit, diffs)
 
 
 def save_function_histories(repository: Repository,
