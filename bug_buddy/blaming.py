@@ -137,7 +137,7 @@ def get_diff_set_hash(diffs: DiffList):
     '''
     base_ids = [diff.base_synthetic_diff_id for diff in diffs]
     base_ids.sort()
-    return hash(frozenset(diff_patches))
+    return hash(frozenset(base_ids))
 
 
 def powerset(diffs):
