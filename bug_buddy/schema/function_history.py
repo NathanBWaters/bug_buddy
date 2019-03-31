@@ -145,10 +145,13 @@ class FunctionHistory(Base):
         '''
         Converts the FunctionHistory into a string
         '''
-        return ('<FunctionHistory {name} | {commit} | '
-                '{file_path}@{first_line}-{last_line}/>'
-                .format(name=self.function.name,
+        return ('<FunctionHistory {id} | {name} | {commit} | '
+                '{file_path}@{first_line}-{last_line} | '
+                'function_id={function_id}/>'
+                .format(id=self.id,
+                        name=self.function.name,
                         commit=self.commit.commit_id,
                         file_path=self.function.file_path,
                         first_line=self.first_line,
-                        last_line=self.last_line))
+                        last_line=self.last_line,
+                        function_id=self.function.id))

@@ -18,11 +18,17 @@ from bug_buddy.logger import logger
 from bug_buddy.schema import Commit, Diff, Repository, Function
 
 
-def db_and_git_match(repository: Repository, command: str, log=True):
+def db_and_git_match(repository: Repository,
+                     command: str,
+                     log=True,
+                     num_commits=15,
+                     branch='bug_buddy'):
     '''
     Confirms if the database commit history and git commit history match.
     '''
-    assert False, 'implement me!'
+    command = 'git log {branch} --format="%H" | head -{}'.format(
+        branch=branch, num_commits=num_commits)
+    
 
 
 def run_cmd(repository: Repository, command: str, log=True):

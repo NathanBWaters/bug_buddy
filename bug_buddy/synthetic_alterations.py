@@ -117,14 +117,16 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                 # if the commit does not already exist for this set, then we
                 # need to create it and run tests against it
                 if not commit:
-                    logger.info('Creating a new commit for diff_subset: {}'
-                                .format(diff_subset))
-
                     # revert back to a clean repository
+                    import pdb; pdb.set_trace()
                     reset_commit = create_reset_commit(repository)
                     if reset_commit:
                         logger.info('Storing reset commit')
                         snapshot_commit(repository, reset_commit)
+                        git_push(repository)
+                        session.commit()
+                    else:
+                        import pdb; pdb.set_trace()
 
                     # create a commit.  Only allow an empty commit if there
                     # nothing in the diff
@@ -237,8 +239,8 @@ def apply_synthetic_diffs(commit: Commit, diff_subset: DiffList):
     created diff
     '''
     for base_synthetic_diff in diff_subset:
-        # create Diff instances
         import pdb; pdb.set_trace()
+        # create Diff instances
         apply_diff(base_synthetic_diff)
 
         # save the diffs
