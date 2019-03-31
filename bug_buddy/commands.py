@@ -10,6 +10,7 @@ from bug_buddy.logger import logger
 from bug_buddy.db import create, get, delete, session_manager
 from bug_buddy.schema import Repository, Function, FunctionHistory, Commit
 from bug_buddy.git_utils import (
+    db_and_git_match,
     delete_bug_buddy_branch,
     get_repository_url_from_path,
     get_repository_name_from_url,
@@ -80,6 +81,8 @@ def generate_command(src_path: str, run_limit: int=None):
         repository = _get_repository_from_src_path(session, src_path)
 
         _check_repo_is_clean(repository)
+
+        db_and_git_match(repository)
 
         logger.info('Creating synthetic results for: {}'.format(repository))
 

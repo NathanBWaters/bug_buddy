@@ -45,6 +45,7 @@ from bug_buddy.errors import UserError
 from bug_buddy.git_utils import (
     create_commit,
     create_reset_commit,
+    db_and_git_match,
     get_previous_commit,
     git_push,
     is_repo_clean,
@@ -107,6 +108,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
 
         for diff_subset in powerset(diff_set):
             logger.info('On run #{} with: {}'.format(num_runs, diff_subset))
+            db_and_git_match(repository)
 
             try:
                 # see if we already have a commit and test run for the diff set.
@@ -125,6 +127,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                         snapshot_commit(repository, reset_commit)
                         git_push(repository)
                         session.commit()
+                        db_and_git_match(repository)
                     else:
                         import pdb; pdb.set_trace()
 
@@ -173,7 +176,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
 
                 num_runs += 1
                 if run_limit and num_runs >= run_limit:
-                    logger.info('Completed all #{} runs.  Exiting'.format(num_runs))
+                    logger.info('Completed all #{} runs! '.format(num_runs))
                     exit()
 
             except Exception as e:

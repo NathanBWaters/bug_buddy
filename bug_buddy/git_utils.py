@@ -12,26 +12,41 @@ from bug_buddy.schema.aliases import DiffList
 from bug_buddy.constants import (
     DEVELOPER_CHANGE,
     SYNTHETIC_RESET_CHANGE)
-from bug_buddy.db import create, Session, get, get_or_create_diff
+from bug_buddy.db import create, Session, get, get_or_create_diff, get_all
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
 from bug_buddy.schema import Commit, Diff, Repository, Function
 
 
 def db_and_git_match(repository: Repository,
-                     command: str,
-                     log=True,
                      num_commits=15,
                      branch='bug_buddy'):
     '''
     Confirms if the database commit history and git commit history match.
     '''
-    command = 'git log {branch} --format="%H" | head -{}'.format(
+    session = Session.object_session(repository)
+    command = 'git log {branch} --format="%H" | head -{num_commits}'.format(
         branch=branch, num_commits=num_commits)
-    
+    git_commit_ids, stderr = run_cmd(repository, command)
+    git_commit_ids = git_commit_ids.split('\n')
+
+    db_commits = get_all(session, Commit, repository=repository)
+    db_commits.sort(key=lambda commits: commits.id, reverse=True)
+
+    i = 0
+    for db_commit in db_commits:
+        if db_commit.commit_id == git_commit_ids[i]:
+            i += 1
+            continue
+        else:
+            logger.info('Database and Git History are out of sync')
+            import pdb; pdb.set_trace()
+            return False
+
+    return True
 
 
-def run_cmd(repository: Repository, command: str, log=True):
+def run_cmd(repository: Repository, command: str, log=False):
     '''
     Runs a shell command
     '''
