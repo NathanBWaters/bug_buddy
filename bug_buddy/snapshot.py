@@ -57,7 +57,7 @@ def snapshot(repository: Repository,
                                allow_empty=allow_empty)
 
         if not commit_only:
-            snapshot_commit(repository, commit)
+            commit = snapshot_commit(repository, commit)
 
         git_push(repository)
 
@@ -108,6 +108,8 @@ def snapshot_commit(repository: Repository, commit: Commit, skip_diffs=False):
         # save the diffs
         save_diffs(repository, commit, diffs)
 
+    return commit
+
 
 def save_function_histories(repository: Repository,
                             commit: Commit,
@@ -151,6 +153,13 @@ def save_function_histories(repository: Repository,
                        .filter(FunctionHistory.first_line == function_node.lineno)
             ).one()
         except NoResultFound:
+            close_no_cigar = (
+                session.query(FunctionHistory)
+                       .join(FunctionHistory.function)
+                       .filter(FunctionHistory.commit_id == previous_commit.id)
+                       .filter(Function.name == function_node.name)
+                       .filter(Function.file_path == function_node.file_path)
+            ).all()
             import pdb; pdb.set_trace()
             logger.error('Unable to find previous function history for node {}'
                          'which was in an unaltered file')

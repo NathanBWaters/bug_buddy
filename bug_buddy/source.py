@@ -273,7 +273,6 @@ def _match_patch_with_history(patch, function_histories: FunctionHistoryList):
             if new_line in function_lines:
                 pass
 
-
         # for change in pat
 
 
@@ -299,9 +298,9 @@ def get_range_of_patch(patch):
         logger.error('Failed to get start_range or end_range')
 
     logger.info('{}-{}'.format(start_range, end_range))
-    if end_range - start_range > 25 or (start_range == 0 and end_range == 132):
-        import pdb; pdb.set_trace()
-        logger.error('What in tarnation')
+    # if end_range - start_range > 25 or (start_range == 0 and end_range == 132):
+    #     import pdb; pdb.set_trace()
+    #     logger.error('What in tarnation')
 
     return start_range, end_range
 

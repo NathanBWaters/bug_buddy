@@ -30,7 +30,6 @@ from typing import List
 
 from bug_buddy.schema.aliases import DiffList
 from bug_buddy.blaming import (
-    get_matching_commit_for_diffs,
     powerset,
     synthetic_blame,
     get_diff_set_hash)
@@ -41,7 +40,7 @@ from bug_buddy.constants import (
     PYTHON_FILE_TYPE,
     SYNTHETIC_CHANGE,
     SYNTHETIC_FIXING_CHANGE)
-from bug_buddy.db import session_manager, Session, create
+from bug_buddy.db import session_manager, Session, create, get
 from bug_buddy.errors import UserError
 from bug_buddy.git_utils import (
     create_commit,
@@ -95,12 +94,11 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
     '''
     session = Session.object_session(repository)
     synthetic_diffs = repository.get_synthetic_diffs()
-    logger.info('synthetic_diffs: {}'.format(synthetic_diffs))
 
     if not synthetic_diffs:
         # create the synthetic diffs
         create_synthetic_alterations(repository)
-        logger.info('You have created the synthetic commits.  Congrats!')
+        logger.info('You have created the base synthetic commits.  Congrats!')
         exit()
 
     num_runs = 0
@@ -123,7 +121,10 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                                 .format(diff_subset))
 
                     # revert back to a clean repository
-                    create_reset_commit(repository)
+                    reset_commit = create_reset_commit(repository)
+                    if reset_commit:
+                        logger.info('Storing reset commit')
+                        snapshot_commit(repository, reset_commit)
 
                     # create a commit.  Only allow an empty commit if there
                     # nothing in the diff
@@ -131,23 +132,27 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                                            commit_type=SYNTHETIC_CHANGE,
                                            allow_empty=True)
 
+                    logger.info('Applying diffs')
                     # apply the synthetic diffs to the mirrored repository
                     apply_synthetic_diffs(commit, diff_subset)
 
                     # store the rest of the commit data.  No need to recreate
                     # the diffs since they have already been stored in
                     # apply_synthetic_diffs
+                    logger.info('Snapshotting the commit: {}'.format(commit))
                     commit = snapshot_commit(
                         repository,
                         commit,
                         skip_diffs=True)
 
                 # add the commit hash id for its synthetic diffs
+                logger.info('Creating synthetic diff hash')
                 if not commit.synthetic_diff_hash:
                     commit.synthetic_diff_hash = get_diff_set_hash(diff_subset)
                     logger.info('Added hash_ids #{} to commit: {}'
                                 .format(commit.synthetic_diff_hash, commit))
 
+                logger.info('Running tests')
                 if not commit.test_runs:
                     # run all tests against the synthetic change
                     run_test(commit)
@@ -159,16 +164,16 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                 logger.debug('3: {}'.format(time.time()))
                 session.commit()
 
-                import pdb; pdb.set_trace()
                 # push newly created commit
-                # git_push(repository)
+                git_push(repository)
 
                 logger.info('Completed run #{}'.format(num_runs))
 
                 num_runs += 1
                 if run_limit and num_runs >= run_limit:
                     logger.info('Completed all #{} runs.  Exiting'.format(num_runs))
-                    break
+                    exit()
+
             except Exception as e:
                 # revert all the local edits
                 logger.error('Hit the following exception: {}'.format(e))
@@ -217,6 +222,15 @@ def create_synthetic_alterations(repository: Repository):
     session.commit()
 
 
+def get_matching_commit_for_diffs(repository, diff_set):
+    '''
+    Given a set of diffs, return if there is a commit that has those diffs
+    '''
+    session = Session.object_session(repository)
+    diff_hash = get_diff_set_hash(diff_set)
+    return get(session, Commit, synthetic_diff_hash=diff_hash)
+
+
 def apply_synthetic_diffs(commit: Commit, diff_subset: DiffList):
     '''
     Creates a new diff from the base synthetic diff.  It then stores the newly
@@ -224,6 +238,7 @@ def apply_synthetic_diffs(commit: Commit, diff_subset: DiffList):
     '''
     for base_synthetic_diff in diff_subset:
         # create Diff instances
+        import pdb; pdb.set_trace()
         apply_diff(base_synthetic_diff)
 
         # save the diffs
@@ -234,8 +249,8 @@ def apply_synthetic_diffs(commit: Commit, diff_subset: DiffList):
                'The diffs are: {}'.format(new_diffs))
         assert len(new_diffs) == 1, msg
 
-        new_diff = new_diffs[0]
-        new_diff.base_synthetic_diff = base_synthetic_diff
+        new_diffs[0].base_synthetic_diff_id = base_synthetic_diff.id
+        new_diffs[0].function = base_synthetic_diff.function
         save_diffs(commit.repository, commit, new_diffs)
 
         # Now add the update to change to the commit so it is not noticed
