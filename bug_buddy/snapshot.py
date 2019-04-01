@@ -248,8 +248,8 @@ def _save_altered_file_function_history(commit: Commit,
                     first_line=node.first_line,
                     last_line=node.last_line)
 
-                logger.info('Created altered function history: {}'
-                            .format(function_history))
+                # logger.info('Created altered function history: {}'
+                #             .format(function_history))
 
             # convert all unmatched nodes into new functions
             create_new_functions_from_nodes(commit, unmatched_nodes)
@@ -330,7 +330,8 @@ def create_diffs(repository: Repository,
                  commit: Commit=None,
                  is_synthetic=False,
                  function: Function=None,
-                 allow_empty=True) -> DiffList:
+                 allow_empty=True,
+                 only_unstaged=False) -> DiffList:
     '''
     Returns a list of diffs from a repository
     '''
@@ -341,7 +342,7 @@ def create_diffs(repository: Repository,
     diffs = []
 
     # the patches should be split on a per function basis
-    patches = get_diff_patches(commit)
+    patches = get_diff_patches(commit, only_unstaged=only_unstaged)
 
     if not allow_empty and not patches:
         import pdb; pdb.set_trace()

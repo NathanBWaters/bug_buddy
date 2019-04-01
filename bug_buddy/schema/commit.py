@@ -215,8 +215,10 @@ class Commit(Base):
         '''
         Converts the repository into a string
         '''
-        return ('<Commit {id} | {commit_id} | {branch} | {commit_type} />'
+        return ('<Commit {id} | {commit_id} | {repository_name} | {branch} '
+                '| {commit_type} />'
                 .format(id=self.id,
                         commit_id=self.commit_id,
+                        repository_name=self.repository.name,
                         branch=self.branch,
                         commit_type=self.commit_type))

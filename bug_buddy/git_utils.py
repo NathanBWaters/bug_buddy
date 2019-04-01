@@ -9,10 +9,17 @@ import subprocess
 from typing import List
 
 from bug_buddy.schema.aliases import DiffList
+from bug_buddy.cli import is_affirmative
 from bug_buddy.constants import (
     DEVELOPER_CHANGE,
     SYNTHETIC_RESET_CHANGE)
-from bug_buddy.db import create, Session, get, get_or_create_diff, get_all
+from bug_buddy.db import (
+    create,
+    get,
+    get_or_create_diff,
+    get_all,
+    delete,
+    Session)
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
 from bug_buddy.schema import Commit, Diff, Repository, Function
@@ -32,6 +39,27 @@ def db_and_git_match(repository: Repository,
 
     db_commits = get_all(session, Commit, repository=repository)
     db_commits.sort(key=lambda commits: commits.id, reverse=True)
+    db_commits = db_commits[:num_commits]
+
+    # First check if one is ahead of the other
+    if db_commits[0].commit_id != git_commit_ids[0]:
+        logger.info('Database and Git History or git_commit_ids/db_commits '
+                    'are out of sync.')
+        if db_commits[0].commit_id not in git_commit_ids:
+            msg = ('BugBuddy database is ahead of git commits.  Would you like '
+                   'to delete the unmatched database commits?  (y/n)\n')
+            should_delete_db_commits = input(msg)
+            if is_affirmative(should_delete_db_commits):
+                import pdb; pdb.set_trace()
+                unmatched_commits = [
+                    commit for commit in db_commits
+                    if commit.commit_id not in git_commit_ids]
+                for commit in unmatched_commits:
+                    delete(session, commit)
+
+    db_commits = get_all(session, Commit, repository=repository)
+    db_commits.sort(key=lambda commits: commits.id, reverse=True)
+    db_commits = db_commits[:num_commits]
 
     i = 0
     for db_commit in db_commits:
@@ -39,7 +67,8 @@ def db_and_git_match(repository: Repository,
             i += 1
             continue
         else:
-            logger.info('Database and Git History are out of sync')
+            logger.info('Database and Git History or git_commit_ids/db_commits '
+                        'are out of sync.')
             import pdb; pdb.set_trace()
             return False
 

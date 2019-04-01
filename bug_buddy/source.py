@@ -115,9 +115,16 @@ def sync_mirror_repo(repository: Repository):
 
     run_cmd(repository, command, log=False)
 
+    # remove the pyc files so that we do not run into any import errors when
+    # trying to run the testing commands:
+    # http://wisercoder.com/importmismatcherror-python-fix/
+    clean_command = 'find . -name \*.pyc -delete'
+    run_cmd(repository, clean_command, log=False)
+
 
 def get_diff_patches(commit: Commit=None,
-                     split_per_method=True) -> List[str]:
+                     split_per_method=True,
+                     only_unstaged=False) -> List[str]:
     '''
     Creates a patch file containing all the diffs in the repository and then
     returns all those patches as a list of patches
@@ -134,7 +141,7 @@ def get_diff_patches(commit: Commit=None,
         diff_data, _ = run_cmd(commit.repository, command)
 
     # TODO: GETTING EVEN WORSE.  This is when there is a commit already created
-    if not diff_data:
+    if not diff_data and not only_unstaged:
         command = 'git diff origin/bug_buddy..HEAD'
         diff_data, _ = run_cmd(commit.repository, command)
 

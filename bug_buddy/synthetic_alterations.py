@@ -32,7 +32,7 @@ from bug_buddy.schema.aliases import DiffList
 from bug_buddy.blaming import (
     powerset,
     synthetic_blame,
-    get_diff_set_hash)
+    get_hash_given_base_synthetic_ids)
 from bug_buddy.constants import (
     BASE_SYNTHETIC_CHANGE,
     BENIGN_STATEMENT,
@@ -131,6 +131,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                     # create a commit.  Only allow an empty commit if there
                     # nothing in the diff
                     commit = create_commit(repository,
+                                           name=SYNTHETIC_CHANGE,
                                            commit_type=SYNTHETIC_CHANGE,
                                            allow_empty=True)
 
@@ -150,7 +151,9 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                 # add the commit hash id for its synthetic diffs
                 logger.info('Creating synthetic diff hash')
                 if not commit.synthetic_diff_hash:
-                    commit.synthetic_diff_hash = get_diff_set_hash(diff_subset)
+                    base_synthetic_ids = [diff.id for diff in diff_subset]
+                    commit.synthetic_diff_hash = (
+                        get_hash_given_base_synthetic_ids(base_synthetic_ids))
                     logger.info('Added hash_ids #{} to commit: {}'
                                 .format(commit.synthetic_diff_hash, commit))
 
@@ -224,12 +227,13 @@ def create_synthetic_alterations(repository: Repository):
     session.commit()
 
 
-def get_matching_commit_for_diffs(repository, diff_set):
+def get_matching_commit_for_diffs(repository, base_synthetic_diffs):
     '''
     Given a set of diffs, return if there is a commit that has those diffs
     '''
     session = Session.object_session(repository)
-    diff_hash = get_diff_set_hash(diff_set)
+    base_synthetic_ids = [diff.id for diff in base_synthetic_diffs]
+    diff_hash = get_hash_given_base_synthetic_ids(base_synthetic_ids)
     return get(session, Commit, synthetic_diff_hash=diff_hash)
 
 
@@ -242,13 +246,18 @@ def apply_synthetic_diffs(commit: Commit, diff_subset: DiffList):
         # create Diff instances
         apply_diff(base_synthetic_diff)
 
-        # save the diffs
-        new_diffs = create_diffs(commit.repository, commit)
+        # save the diffs but only look for the unstaged edits
+        new_diffs = create_diffs(commit.repository, commit, only_unstaged=True)
 
-        # there should only be one created
-        msg = ('More than one diff created in the apply_synthetic_diff step. '
-               'The diffs are: {}'.format(new_diffs))
-        assert len(new_diffs) == 1, msg
+        try:
+            # there should only be one created
+            msg = ('More than one diff created in the apply_synthetic_diff '
+                   'step. The diffs are: {}'.format(new_diffs))
+            assert len(new_diffs) == 1, msg
+        except AssertionError:
+            print('Got more than one diff')
+            import pdb; pdb.set_trace()
+            create_diffs(commit.repository, commit, only_unstaged=True)
 
         new_diffs[0].base_synthetic_diff_id = base_synthetic_diff.id
         new_diffs[0].function = base_synthetic_diff.function

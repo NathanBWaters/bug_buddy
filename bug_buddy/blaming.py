@@ -70,7 +70,8 @@ def synthetic_blame(commit: Commit,
         if len(diff_set) == len(commit.diffs):
             break
 
-        diff_hash = get_diff_set_hash(diff_set)
+        base_synthetic_ids = [diff.base_synthetic_diff_id for diff in diff_set]
+        diff_hash = get_hash_given_base_synthetic_ids(base_synthetic_ids)
         child_commit = (
             session.query(Commit)
             .filter(Commit.synthetic_diff_hash == diff_hash).one())
@@ -97,9 +98,9 @@ def synthetic_blame(commit: Commit,
                 [blame.diff for blame in children_test_failure_blames]))
 
             for faulty_diff in faulty_diffs:
-                logger.info('Assigning blame using child commit {} blame {} '
-                            'for test failure: {}'
-                            .format(child_commit, faulty_diff, test_failure))
+                # logger.info('Assigning blame using child commit {} blame {} '
+                #             'for test failure: {}'
+                #             .format(child_commit, faulty_diff, test_failure))
                 create(session,
                        Blame,
                        diff=faulty_diff,
@@ -122,21 +123,20 @@ def synthetic_blame(commit: Commit,
     logger.info('Completed blaming for {}'.format(commit))
 
 
-def get_diff_set_hash(diffs: DiffList):
+def get_hash_given_base_synthetic_ids(base_synthetic_ids):
     '''
     Given a list of diffs, return the hash which is consisted of an ordered
     set of base synthetic commit ids
     '''
-    base_ids = [diff.base_synthetic_diff_id for diff in diffs]
-    base_ids.sort()
-    return hash(frozenset(base_ids))
+    base_synthetic_ids.sort()
+    return hash(frozenset(base_synthetic_ids))
 
 
 def powerset(diffs):
     '''
-    Returns the powerset of the diffs except the empty set
+    Returns the powerset of the diffs
 
-    "powerset([1,2,3]) --> (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
+    "powerset([1,2,3]) --> (), (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
 
     @param: list of diffs
     @returns: powerset of the diffs

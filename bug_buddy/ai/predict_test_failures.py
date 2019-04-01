@@ -5,7 +5,7 @@ a commit.
 import numpy
 import random
 
-from bug_buddy.constants import SYNTHETIC_RESET_CHANGE
+from bug_buddy.constants import SYNTHETIC_CHANGE
 from bug_buddy.schema import Commit, Repository
 
 
@@ -51,7 +51,7 @@ def get_training_data(repository: Repository):
     Returns the repository's data to be ready for training
     '''
     commits = [commit for commit in repository.commits
-               if (commit.commit_type != SYNTHETIC_RESET_CHANGE and
+               if (commit.commit_type == SYNTHETIC_CHANGE and
                    commit.test_runs)]
     random.shuffle(commits)
 
