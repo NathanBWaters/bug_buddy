@@ -133,6 +133,11 @@ def get_diff_patches(commit: Commit=None,
         command = 'git --no-pager diff'
         diff_data, _ = run_cmd(commit.repository, command)
 
+    # TODO: GETTING EVEN WORSE.  This is when there is a commit already created
+    if not diff_data:
+        command = 'git diff origin/bug_buddy..HEAD'
+        diff_data, _ = run_cmd(commit.repository, command)
+
     raw_patches = diff_data.split('diff --git ')[1:]
 
     # covert the list of patches into whatthepatch patch objects

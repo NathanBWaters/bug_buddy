@@ -120,7 +120,6 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                 # need to create it and run tests against it
                 if not commit:
                     # revert back to a clean repository
-                    import pdb; pdb.set_trace()
                     reset_commit = create_reset_commit(repository)
                     if reset_commit:
                         logger.info('Storing reset commit')
@@ -128,8 +127,6 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                         git_push(repository)
                         session.commit()
                         db_and_git_match(repository)
-                    else:
-                        import pdb; pdb.set_trace()
 
                     # create a commit.  Only allow an empty commit if there
                     # nothing in the diff
@@ -242,7 +239,6 @@ def apply_synthetic_diffs(commit: Commit, diff_subset: DiffList):
     created diff
     '''
     for base_synthetic_diff in diff_subset:
-        import pdb; pdb.set_trace()
         # create Diff instances
         apply_diff(base_synthetic_diff)
 
@@ -259,8 +255,9 @@ def apply_synthetic_diffs(commit: Commit, diff_subset: DiffList):
         save_diffs(commit.repository, commit, new_diffs)
 
         # Now add the update to change to the commit so it is not noticed
-        # in the next diff creation
-        update_commit(commit.repository)
+        # in the next diff creation.  This will also change the commit_id of the
+        # commit
+        update_commit(commit)
 
 
 def create_synthetic_diff_for_node(repository: Repository,

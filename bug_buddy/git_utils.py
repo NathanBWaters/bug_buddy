@@ -179,16 +179,20 @@ def _store_commit(repository: Repository,
     return commit
 
 
-def update_commit(repository: Repository):
+def update_commit(commit: Commit):
     '''
     Updates the commit with the altered local space
 
     @param repository: the repository with the commit to be updated
     '''
-    git_add(repository)
+    git_add(commit.repository)
 
     # git commit --amend --no-edit
-    Git(repository.path).commit('--amend', '--no-edit')
+    Git(commit.repository.path).commit('--amend', '--no-edit')
+
+    # the commit id is updated when the contents are updated
+    new_commit_id = get_commit_id(commit.repository)
+    commit.commit_id = new_commit_id
 
 
 def revert_commit(repository: Repository, commit: Commit):

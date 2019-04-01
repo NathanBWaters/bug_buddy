@@ -173,8 +173,8 @@ def save_function_histories(repository: Repository,
             first_line=previous_function_history.first_line,
             last_line=previous_function_history.last_line)
 
-        logger.info('Created unaltered function history: {}'
-                    .format(function_history))
+        # logger.info('Created unaltered function history: {}'
+        #             .format(function_history))
 
     # If the file was altered, then we need to be extremely careful about how
     # we track function history.
