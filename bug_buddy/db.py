@@ -65,14 +65,15 @@ def create(session, sql_class, **kwargs):
 
 def get_or_create(session, sql_class, **kwargs):
     '''
-    Used to get a single instance of a class that matches the kwargs parameters
+    Used to get a single instance of a class that matches the kwargs parameters.
+    Returns True if it had to create a new instance
     '''
     class_instance = get(session, sql_class, **kwargs)
     if class_instance:
-        return class_instance, True
+        return class_instance, False
 
     class_instance = create(session, sql_class, **kwargs)
-    return class_instance, False
+    return class_instance, True
 
 
 def delete(session, sql_instance):

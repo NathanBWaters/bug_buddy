@@ -64,9 +64,11 @@ class TestResult(Base):
         '''
         Converts the repository into a string
         '''
-        return ('<TestResult {id} | {file}.{classname}.{name} | {status} />'
+        return ('<TestResult {id} | {file}.{classname}.{name} | {status} | '
+                'test_id={test_id} />'
                 .format(id=self.id,
                         name=self.test.name,
                         file=self.test.file,
                         classname=self.test.classname,
-                        status=self.status))
+                        status=self.status,
+                        test_id=self.test.id))

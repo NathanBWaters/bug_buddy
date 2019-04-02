@@ -122,7 +122,7 @@ def sync_mirror_repo(repository: Repository):
     run_cmd(repository, clean_command, log=False)
 
 
-def get_diff_patches(commit: Commit=None,
+def get_diff_patches(commit: Commit,
                      split_per_method=True,
                      only_unstaged=False) -> List[str]:
     '''
@@ -131,7 +131,7 @@ def get_diff_patches(commit: Commit=None,
     '''
     # this command will output the diff information into stdout
     command = 'git --no-pager diff'
-    if commit:
+    if commit and not only_unstaged:
         command += ' {hash}~ {hash}'.format(hash=commit.commit_id)
     diff_data, _ = run_cmd(commit.repository, command)
 

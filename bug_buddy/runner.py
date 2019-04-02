@@ -79,7 +79,7 @@ def library_is_testable(repository):
     assuming we have altered a method that is called during import of the
     library.  This is a huge limitation of bug_buddy.
     '''
-    command = 'pytest --collect-only'
+    command = 'python -m pytest --collect-only'
     stdout, stderr = run_cmd(repository, command)
     if stderr:
         return False
