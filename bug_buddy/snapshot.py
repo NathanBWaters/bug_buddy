@@ -279,7 +279,7 @@ def create_new_functions_from_nodes(commit: Commit, function_nodes):
             first_line=node.first_line,
             last_line=node.last_line)
 
-        logger.info('Created new function history: {}'.format(function_history))
+        # logger.info('Created new function history: {}'.format(function_history))
 
 
 def _match_nodes_with_history(previous_histories, current_nodes):

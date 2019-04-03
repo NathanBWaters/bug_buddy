@@ -79,9 +79,12 @@ def library_is_testable(repository):
     assuming we have altered a method that is called during import of the
     library.  This is a huge limitation of bug_buddy.
     '''
+    import pdb; pdb.set_trace()
     command = 'python -m pytest --collect-only'
     stdout, stderr = run_cmd(repository, command)
-    if stderr:
+
+    # TODO - this is also really hacky
+    if stderr or '=============== ERRORS ====================' in stdout:
         return False
 
     return True

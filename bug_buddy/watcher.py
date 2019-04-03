@@ -12,6 +12,7 @@ from bug_buddy.git_utils import run_cmd, is_repo_clean, set_bug_buddy_branch
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository
 from bug_buddy.snapshot import snapshot
+from bug_buddy.scorecard import Scorecard
 from bug_buddy.source import sync_mirror_repo
 
 
@@ -29,6 +30,10 @@ class ChangeWatchdog(PatternMatchingEventHandler):
         self.repository = repository
         self.commit_only = commit_only
 
+        self.score_card = Scorecard()
+
+        self.score_card.render()
+
     def on_any_event(self, event):
         '''
         Catches all events
@@ -40,7 +45,6 @@ class ChangeWatchdog(PatternMatchingEventHandler):
                                        self.repository.original_path)
         if (not updated_file or updated_file in self.repository.ignored_files or
                 not updated_file.endswith('.py')):
-            logger.info('Ignoring update to {}'.format(updated_file))
             return
 
         # we have to recreate the repository in this thread for Sqlite
@@ -54,11 +58,16 @@ class ChangeWatchdog(PatternMatchingEventHandler):
                 logger.info('Valid change event: {}'.format(event))
 
                 # make sure the repository is on the bug_buddy branch
-                commit = snapshot(repository, commit_only=self.commit_only)
-                print('Completed snapshot of {}'.format(commit))
+                # commit = snapshot(repository, commit_only=self.commit_only)
+                # print('Completed snapshot of {}'.format(commit))
+                # session.commit()
 
-                # run the tests in a appropriate order
-                session.commit()
+                # run the tests in a smart order
+                # TODO
+
+                # display the results in the cli output
+                # self.score_card.render(commit)
+
             else:
                 logger.info('Nothing was changed')
 

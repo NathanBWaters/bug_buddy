@@ -13,8 +13,10 @@ def train(repository: Repository):
     '''
     Creates and trains a neural network.  It then exports a model.
     '''
+    # bringing this into the method because keras takes so long to load
     from keras.models import Sequential
     from keras.layers import Dense
+
     (train_features,
      train_labels,
      validation_features,
@@ -101,8 +103,6 @@ def commit_to_feature(commit: Commit):
     changed and a 0 for each method that was not changed.  The array is in
     alphabetical order.
     '''
-    commit_diffs = commit.diffs
-
     # TODO - this doesn't make sense when a commit could have different
     # functions (i.e. adding functions, etc)
     sorted_functions = commit.repository.functions
@@ -110,13 +110,15 @@ def commit_to_feature(commit: Commit):
 
     feature = []
     for function in sorted_functions:
-        if function.synthetic_diff in commit_diffs:
-            feature.append(1)
-        else:
-            feature.append(0)
+        # if the function even has a diff for the commit, then it's the
+        # 'assert False' statement
+        was_altered = any([diff.commit.id == commit.id for diff in
+                           function.diffs])
+        feature.append(int(was_altered))
 
-    if len(feature) != 333:
+    if len(feature) != 337:
         import pdb; pdb.set_trace()
+
     return numpy.asarray(feature)
 
 

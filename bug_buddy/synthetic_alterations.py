@@ -100,7 +100,6 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
         # create the synthetic diffs
         create_synthetic_alterations(repository)
         logger.info('You have created the base synthetic commits.  Congrats!')
-        exit()
 
     num_runs = 0
     for diff_set in yield_blame_set(synthetic_diffs):
