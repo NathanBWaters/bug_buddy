@@ -27,6 +27,15 @@ class Blame(Base):
     test_result_id = Column(Integer, ForeignKey('test_result.id'))
     test_result = relationship('TestResult', back_populates='blames')
 
+    # the diff might not correspond with a function, but if it does then we
+    # should store that as well.  We store both the function and tests because
+    # it is easier to query for from the database.
+    function_id = Column(Integer, ForeignKey('function.id'), nullable=True)
+    function = relationship('Function')
+
+    test_id = Column(Integer, ForeignKey('test.id'))
+    test = relationship('Test')
+
     def __init__(self,
                  diff: Diff,
                  test_result: TestResult):
@@ -35,6 +44,8 @@ class Blame(Base):
         '''
         self.diff = diff
         self.test_result = test_result
+        self.function = diff.function
+        self.test = test_result.test
 
     def __repr__(self):
         '''

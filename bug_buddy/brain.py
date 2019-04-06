@@ -14,61 +14,138 @@ from keras.models import Sequential
 from keras.layers import Dense, Activation, Flatten, Convolution2D, Permute
 from keras.optimizers import Adam
 import keras.backend as K
+import numpy
 from rl.agents.dqn import DQNAgent
 from rl.policy import LinearAnnealedPolicy, BoltzmannQPolicy, EpsGreedyQPolicy
 from rl.memory import SequentialMemory
 from rl.core import Processor
 from rl.callbacks import FileLogger, ModelIntervalCheckpoint
+from sqlalchemy import desc
 
 from bug_buddy.constants import (
+    SYNTHETIC_CHANGE,
     TEST_OUTPUT_SUCCESS,
     TEST_OUTPUT_FAILURE,
+    TEST_OUTPUT_NOT_RUN,
     TEST_OUTPUT_SKIPPED)
-from bug_buddy.schema import Repository, Commit
+from bug_buddy.db import Session
+from bug_buddy.schema import Repository, Commit, Blame
 
 
 INPUT_SHAPE = (84, 84)
 WINDOW_LENGTH = 4
 
 
-def get_previous_commits(commit, num_commits=4):
+def get_blame_count(function, test):
     '''
-    Gets the commit's previous commits
+    Returns the number of times a function change has been blamed for a test
     '''
-    raise NotImplementedError()
+    # A blame is made up of diff id and test result id, so given a test and a
+    # function means we have to do some expensive queries
+    session = Session.object_session(function)
+    return len(session.query(Blame)
+                      .filter(Blame.function_id == function.id)
+                      .filter(Blame.test_id == test.id)
+                      .all())
 
 
-def commit_to_feature(commit: Commit):
+def commit_to_tensor(commit):
     '''
-    Converts a commit to a numpy array that represents the features for
-    determining which test failures might occur from the change.
+    Converts an individual commit into a tensor with the following shape:
 
-    In this case, it is simply a numpy array with a 1 for each method that was
-    changed and a 0 for each method that was not changed.  The array is in
-    alphabetical order.
+                functionA                               functionB
+    --------------------------------------------------------------------------
+    testA      [function_altered,
+                test_status,                               ...
+                blame_count]
+    --------------------------------------------------------------------------
+    testB       ...                                        ...
+    --------------------------------------------------------------------------
     '''
-    # TODO - this doesn't make sense when a commit could have different
-    # functions (i.e. adding functions, etc)
     sorted_functions = commit.repository.functions
     sorted_functions.sort(key=lambda func: func.id, reverse=False)
 
-    feature = []
-    for function in sorted_functions:
-        # if the function even has a diff for the commit, then it's the
-        # 'assert False' statement
-        was_altered = any([diff.commit.id == commit.id for diff in
-                           function.diffs])
-        feature.append(int(was_altered))
-
-    if len(feature) != 337:
-        import pdb; pdb.set_trace()
-
-    test_results = commit.test_runs[0].test_results
+    sorted_tests = commit.repository.tests
     sorted_tests.sort(key=lambda test: test.id, reverse=False)
 
-    # for test in sorted_tests:
-        # if test.
-    return numpy.asarray(feature)
+    # the current features are:
+    #   function_altered
+    #   test_status
+    #   blame_count
+    num_function_test_features = 3
+    commit_tensor = numpy.zeros((len(sorted_functions),
+                                 len(sorted_tests),
+                                 num_function_test_features))
+
+    test_status_map = {
+        TEST_OUTPUT_NOT_RUN: 0,
+        TEST_OUTPUT_SKIPPED: 1,
+        TEST_OUTPUT_FAILURE: 2,
+        TEST_OUTPUT_SUCCESS: 3,
+    }
+
+    for i in range(len(sorted_functions)):
+        function = sorted_functions[i]
+        function_was_altered = any([diff.commit.id == commit.id for diff in
+                                    function.diffs])
+        for j in range(len(sorted_tests)):
+            # Step 1 - add whether or not the function was altered for this
+            # commit.  1 for altered, 0 otherwise.
+            commit_tensor[i][j][0] = int(function_was_altered)
+
+            # Step 2 - add the status of the test.  If the test is not ran
+            # the id will be 0, which represents that the test has not been
+            # ran yet
+            test = sorted_tests[i]
+            test_results = [test_result for test_result in
+                            commit.test_runs[0].test_results
+                            if test_result.test.id == test.id]
+
+            if len(test_results) > 1:
+                import pdb; pdb.set_trace()
+
+            if test_results:
+                test_result = test_results[0]
+                commit_tensor[i][j][1] = test_status_map[test_result.status]
+
+            # Step 3 - add the blame count, which represents how many times
+            # the function has been blamed for the test
+            blame_count = get_blame_count(test, function)
+            commit_tensor[i][j][2] = blame_count
+
+    return commit_tensor
+
+
+def get_previous_commits(commit: Commit):
+    '''
+    Returns the previous commits
+    '''
+    session = Session.object_session(commit)
+    if commit.commit_type == SYNTHETIC_CHANGE:
+        return (
+            session.query(Commit)
+            .filter(Commit.commit_type == SYNTHETIC_CHANGE)
+            .filter(Commit.id < commit.id)
+            .order_by(desc(Commit.id))
+            .limit(4)
+        ).all()
+    else:
+        raise NotImplementedError()
+
+
+def commit_to_input(commit: Commit):
+    '''
+    Converts a commit to a tensor that stores features about the commit and
+    its previous commits
+    '''
+    commits = get_previous_commits(commit)
+    commits.append(commit)
+
+    input_tensor = []
+    for commit in commits:
+        input_tensor.append(commit_to_tensor(commit))
+
+    numpy.asarray(input_tensor)
 
 
 class BugBuddyEnvironment(Env):
@@ -146,7 +223,6 @@ class BugBuddyEnvironment(Env):
         Returns a tuple containing (new_state, reward, done, info)
         '''
         test_to_run = action
-
 
     def reset(self):
         '''

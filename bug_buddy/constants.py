@@ -16,6 +16,7 @@ FILE_TYPES = {
 TEST_OUTPUT_SUCCESS = 'success'
 TEST_OUTPUT_FAILURE = 'failure'
 TEST_OUTPUT_SKIPPED = 'skipped'
+TEST_OUTPUT_NOT_RUN = 'not_run'
 
 ########################################################
 #                 Synthetic Statements                 #

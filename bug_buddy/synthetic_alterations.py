@@ -82,7 +82,7 @@ def yield_blame_set(synthetic_diffs: DiffList):
         diff_set = []
         for i in range(4):
             diff_set.append(
-                synthetic_diffs[random.randint(0, len(synthetic_diffs))])
+                synthetic_diffs[random.randint(0, len(synthetic_diffs) - 1)])
 
         logger.info('Yielding diff set: {}'.format(diff_set))
         # remove duplicates if they exist
@@ -100,6 +100,8 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
         # create the synthetic diffs
         create_synthetic_alterations(repository)
         logger.info('You have created the base synthetic commits.  Congrats!')
+        session.commit()
+        synthetic_diffs = repository.get_synthetic_diffs()
 
     num_runs = 0
     for diff_set in yield_blame_set(synthetic_diffs):
