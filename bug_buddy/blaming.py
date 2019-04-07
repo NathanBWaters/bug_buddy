@@ -16,7 +16,6 @@ from bug_buddy.db import (
     get_all)
 from bug_buddy.git_utils import create_commit
 from bug_buddy.logger import logger
-from bug_buddy.runner import run_test
 from bug_buddy.schema import (
     Repository,
     Blame,

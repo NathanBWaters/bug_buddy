@@ -54,7 +54,7 @@ from bug_buddy.git_utils import (
     run_cmd,
     set_bug_buddy_branch,
     update_commit)
-from bug_buddy.runner import run_test, library_is_testable
+from bug_buddy.runner import run_all_tests, library_is_testable
 from bug_buddy.logger import logger
 from bug_buddy.schema import (
     Commit,
@@ -161,7 +161,7 @@ def generate_synthetic_test_results(repository: Repository, run_limit: int):
                 logger.info('Running tests')
                 if not commit.test_runs:
                     # run all tests against the synthetic change
-                    run_test(commit)
+                    run_all_tests(commit)
 
                 logger.debug('2: {}'.format(time.time()))
                 if commit.needs_blaming():

@@ -36,7 +36,7 @@ class TestRun(Base):
 
     def __init__(self,
                  commit: Commit,
-                 start_timestamp: int=None):
+                 start_timestamp: int=time.time()):
         '''
         Creates a new TestResults instance
         '''
