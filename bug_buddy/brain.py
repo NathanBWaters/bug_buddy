@@ -10,10 +10,11 @@ import numpy as np
 import gym
 from gym import Env, spaces
 from keras.models import Sequential
-from keras.layers import Dense, Activation, Flatten, Convolution2D, Permute
+from keras.layers import Dense, Activation, Flatten, Convolution2D, Input
 from keras.optimizers import Adam
 import keras.backend as K
 import numpy
+import random
 from rl.agents.dqn import DQNAgent
 from rl.policy import LinearAnnealedPolicy, BoltzmannQPolicy, EpsGreedyQPolicy
 from rl.memory import SequentialMemory
@@ -40,13 +41,14 @@ from bug_buddy.schema import (
 from bug_buddy.runner import run_test, get_list_of_tests
 
 
-INPUT_SHAPE = (84, 84)
-WINDOW_LENGTH = 4
+# the number of commits that are fed into the neural network
+NUM_INPUT_COMMITS = 4
 
 # the locations of the following attributes inside the state tensor
 FUNCTION_ALTERED_LOC = 0
 TEST_STATUS_LOC = 1
 BLAME_COUNT_LOC = 2
+
 TEST_STATUS_TO_ID_MAP = {
     TEST_OUTPUT_NOT_RUN: 0,
     TEST_OUTPUT_SKIPPED: 1,
@@ -55,24 +57,44 @@ TEST_STATUS_TO_ID_MAP = {
 }
 
 
+def get_input_shape(repository: Repository):
+    '''
+    Returns the shape of the inputs
+    '''
+    num_functions = len(repository.functions)
+    num_tests = len(repository.tests)
+    num_features = 3
+    return (NUM_INPUT_COMMITS, num_functions, num_tests, num_features)
+
+
 def synthetic_train(repository: Repository):
     '''
     Trains the agent on synthetic data generation
     '''
-    logger.info('Training: {}'.format(repository))
+    logger.info('Training on synthetic data for: {}'.format(repository))
+    brain = Brain(repository)
+    env = BugBuddyEnvironment(repository, is_synthetic_training=True)
+    env.reset()
+    brain.train(env)
 
 
-def get_blame_count(function, test):
+def get_blame_counts_for_function(function):
     '''
     Returns the number of times a function change has been blamed for a test
     '''
     # A blame is made up of diff id and test result id, so given a test and a
     # function means we have to do some expensive queries
     session = Session.object_session(function)
-    return len(session.query(Blame)
-                      .filter(Blame.function_id == function.id)
-                      .filter(Blame.test_id == test.id)
-                      .all())
+    blames = (session.query(Blame.test_id, func.count(Blame.test_id))
+                     .filter(Blame.function_id == function.id)
+                     .group_by(Blame.test_id)
+                     .all())
+
+    blame_dict = {}
+    for test_id, blame_count in blames:
+        blame_dict[test_id] = blame_count
+
+    return blame_dict
 
 
 def commit_to_tensor(commit):
@@ -103,10 +125,24 @@ def commit_to_tensor(commit):
                                  len(sorted_tests),
                                  num_function_test_features))
 
+    # store the results of the tests for the commit in a dictionary for quick
+    # lookup
+    commit_results = {}
+    if commit.test_runs:
+        test_run = commit.test_runs[0]
+        for test_result in test_run.test_results:
+            commit_results[test_result.test.id] = (
+                TEST_STATUS_TO_ID_MAP[test_result.status])
+
+    logger.info('Commit Test Results: {}'.format(commit_results))
+
     for i in range(len(sorted_functions)):
         function = sorted_functions[i]
+        logger.info('On function: {}'.format(function))
+
         function_was_altered = any([diff.commit.id == commit.id for diff in
                                     function.diffs])
+        blame_counts = get_blame_counts_for_function(function)
         for j in range(len(sorted_tests)):
             # Step 1 - add whether or not the function was altered for this
             # commit.  1 for altered, 0 otherwise.
@@ -115,28 +151,19 @@ def commit_to_tensor(commit):
             # Step 2 - add the status of the test.  If the test is not ran
             # the id will be 0, which represents that the test has not been
             # ran yet
-            test = sorted_tests[i]
-            test_results = [test_result for test_result in
-                            commit.test_runs[0].test_results
-                            if test_result.test.id == test.id]
-
-            if len(test_results) > 1:
-                import pdb; pdb.set_trace()
-
-            if test_results:
-                test_result = test_results[0]
-                commit_tensor[i][j][TEST_STATUS_LOC] = (
-                    TEST_STATUS_TO_ID_MAP[test_result.status])
+            test = sorted_tests[j]
+            commit_tensor[i][j][TEST_STATUS_LOC] = commit_results.get(
+                test.id, TEST_STATUS_TO_ID_MAP[TEST_OUTPUT_NOT_RUN])
 
             # Step 3 - add the blame count, which represents how many times
             # the function has been blamed for the test
-            blame_count = get_blame_count(test, function)
+            blame_count = blame_counts.get(test.id, 0)
             commit_tensor[i][j][BLAME_COUNT_LOC] = blame_count
 
     return commit_tensor
 
 
-def get_previous_commits(commit: Commit, num_commits: int=4):
+def get_previous_commits(commit: Commit, num_commits: int=NUM_INPUT_COMMITS):
     '''
     Returns the previous commits
     '''
@@ -153,21 +180,21 @@ def get_previous_commits(commit: Commit, num_commits: int=4):
         raise NotImplementedError()
 
 
-def commit_to_state(commit: Commit, max_length=4):
+def commit_to_state(commit: Commit, max_length=NUM_INPUT_COMMITS):
     '''
     Converts a commit to a tensor that stores features about the commit and
     its previous commits
     '''
-    commits = get_previous_commits(commit, num_commits=max_length - 1)
+    commits = get_previous_commits(commit, num_commits=NUM_INPUT_COMMITS - 1)
     commits.append(commit)
 
     # keep adding the original commit if there are less than max_length commits
     # preceding the commit
-    while len(max_length) < max_length:
+    while len(commits) < NUM_INPUT_COMMITS:
         commits.append(commit)
 
-    # sort by id
-    commits.sort(key=lambda commit: commit.id, reverse=False)
+    # sort by id, so that the latest commit is first
+    commits.sort(key=lambda commit: commit.id, reverse=True)
 
     input_tensor = []
     for commit in commits:
@@ -181,25 +208,27 @@ class BugBuddyEnvironment(Env):
     An environment is the commit and interacting with that commit such as
     running tests against it and assigning blame
     '''
-    def __init__(self, is_synthetic_training=False):
+    def __init__(self, repository: Repository, is_synthetic_training=False):
         ''''
         Creates an environment from a commit
         '''
-        self.observation_space = spaces.Discrete(None)
-        self.action_space = spaces.Discrete(None)
-
+        # self.observation_space = spaces.Discrete(None)
+        # self.action_space = spaces.Discrete(None)
+        self.repository = repository
         self.is_synthetic_training = is_synthetic_training
 
-        self.max_input_commits = 4
+        self.session = Session.object_session(repository)
 
     def set_commit(self, commit):
         '''
         Whenever we update the commit for the Environment, we need to set
         multiple different variables
         '''
+        logger.info('Setting commit to {}'.format(commit))
+
         self.session = Session.object_session(commit)
         self.commit = commit
-        self.state = commit_to_state(commit, max_length=self.max_input_commits)
+        self.state = commit_to_state(commit)
 
         # All tests are linked with a corresponding TestRun instance.  When
         # running the tests against this state
@@ -212,6 +241,7 @@ class BugBuddyEnvironment(Env):
 
         # list of the tests that have already been ran for this commit
         self.tests_ran = []
+        logger.info('Set commit')
 
     def step(self, action):
         '''
@@ -232,6 +262,7 @@ class BugBuddyEnvironment(Env):
             info (dict): Contains auxiliary diagnostic information (helpful for
                          debugging, and sometimes learning).
         '''
+        logger.info('Running test: {}'.format(action))
         # for right now, the action will be the test that the agent wants to run
 
         # if we are in synthetic training, then we don't need to run the test.
@@ -391,9 +422,10 @@ class BugBuddyEnvironment(Env):
             # that commit
             commit = (
                 self.session.query(Commit)
-                            .filter_by(Commit.commit_type == SYNTHETIC_CHANGE)
-                            .order_by(func.rand())
-                            .first())
+                .filter(Commit.commit_type == SYNTHETIC_CHANGE)
+                .filter(Commit.repository_id == self.repository.id)
+                .order_by(func.random())
+                .first())
 
             # re-initialize the environment with the new commit
             self.set_commit(commit)
@@ -431,10 +463,10 @@ class Brain(object):
         '''
         self.weights_filename = 'brain_weights.h5f'
 
-        memory = SequentialMemory(limit=1000000, window_length=WINDOW_LENGTH)
-        processor = BugBuddyProcessor()
+        memory = SequentialMemory(limit=1000000, window_length=1)
+        # processor = BugBuddyProcessor()
 
-        number_of_tests = 513
+        number_of_tests = len(repository.tests)
 
         policy = LinearAnnealedPolicy(
             EpsGreedyQPolicy(),
@@ -446,33 +478,38 @@ class Brain(object):
 
         # Create the agent
         model = Sequential()
-        model.add(Convolution2D(256, (8, 8), strides=(4, 4)))
+        model.add(Convolution2D(256,
+                                (8, 8),
+                                strides=(4, 4),
+                                input_shape=get_input_shape(repository)[1:]))
         model.add(Activation('relu'))
         model.add(Convolution2D(128, (4, 4), strides=(2, 2)))
         model.add(Activation('relu'))
         model.add(Convolution2D(64, (3, 3), strides=(1, 1)))
         model.add(Activation('relu'))
         model.add(Flatten())
-        model.add(Dense(512))
+        model.add(Dense(1024))
         model.add(Activation('relu'))
         model.add(Dense(number_of_tests))
         model.add(Activation('linear'))
-        print(model.summary())
 
-        dqn = DQNAgent(
-            model=self.model,
-            nb_actions=1231,
+        self.agent = DQNAgent(
+            model=model,
+            nb_actions=number_of_tests,
             policy=policy,
             memory=memory,
-            processor=processor,
+            # processor=processor,
             nb_steps_warmup=50000,
             gamma=.99,
             target_model_update=10000,
             train_interval=4,
             delta_clip=1.)
-        dqn.compile(
+
+        self.agent.compile(
             Adam(lr=.00025),
             metrics=['mae'])
+
+        print(model.summary())
 
     def train(self, env):
         '''
@@ -480,10 +517,15 @@ class Brain(object):
         '''
         checkpoint_weights_filename = 'brain_weights_{step}.h5f'
         log_filename = 'brain_log.json'
-        callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=250000)]
+        callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename,
+                                             interval=250000)]
         callbacks += [FileLogger(log_filename, interval=100)]
 
-        self.agent.fit(env, callbacks=callbacks, nb_steps=1750000, log_interval=10000)
+        # Training our agent
+        self.agent.fit(env,
+                       callbacks=callbacks,
+                       nb_steps=1750000,
+                       log_interval=10000)
 
         # After training is done, we save the final weights one more time.
         self.agent.save_weights(self.weights_filename, overwrite=True)
