@@ -10,7 +10,7 @@ import numpy as np
 import gym
 from gym import Env, spaces
 from keras.models import Sequential
-from keras.layers import Dense, Activation, Flatten, Convolution2D, Input
+from keras.layers import Dense, Activation, Flatten, Convolution3D, Input
 from keras.optimizers import Adam
 import keras.backend as K
 import numpy
@@ -57,6 +57,21 @@ TEST_STATUS_TO_ID_MAP = {
 }
 
 
+def cache_commits(repository: Repository):
+    '''
+    Makes sure all commits have been properly converted into a tensor
+    '''
+    session = Session.object_session(repository)
+    synthetic_commits = (
+        session.query(Commit)
+        .filter(Commit.commit_type == SYNTHETIC_CHANGE)
+        .filter(Commit.repository_id == repository.id)
+    ).all()
+
+    for commit in synthetic_commits:
+        commit_to_tensor(commit)
+
+
 def get_input_shape(repository: Repository):
     '''
     Returns the shape of the inputs
@@ -72,8 +87,12 @@ def synthetic_train(repository: Repository):
     Trains the agent on synthetic data generation
     '''
     logger.info('Training on synthetic data for: {}'.format(repository))
+    # logger.info('Caching commit tensors')
+    # cache_commits(repository)
+
+    logger.info('Initializing environment')
     brain = Brain(repository)
-    env = BugBuddyEnvironment(repository, is_synthetic_training=True)
+    env = BugBuddyEnvironment(repository, synthetic_training=True)
     env.reset()
     brain.train(env)
 
@@ -109,7 +128,21 @@ def commit_to_tensor(commit):
     --------------------------------------------------------------------------
     testB       ...                                        ...
     --------------------------------------------------------------------------
+
+    or another way of looking at the shape:
+
+    [functionA: [testA: [functionA_altered, testA_status, blame_count],
+                [testB: [functionA_altered, testB_status, blame_count],
+     ...
+    ]
     '''
+    if commit._commit_tensor_binary:
+        logger.info('Returning cache for {}'.format(commit))
+        return commit.commit_tensor
+
+    logger.info('Creating cached commit tensor for {}'.format(commit))
+    session = Session.object_session(commit)
+
     sorted_functions = commit.repository.functions
     sorted_functions.sort(key=lambda func: func.id, reverse=False)
 
@@ -160,6 +193,8 @@ def commit_to_tensor(commit):
             blame_count = blame_counts.get(test.id, 0)
             commit_tensor[i][j][BLAME_COUNT_LOC] = blame_count
 
+    commit._commit_tensor_binary = commit_tensor
+    session.commit()
     return commit_tensor
 
 
@@ -180,27 +215,59 @@ def get_previous_commits(commit: Commit, num_commits: int=NUM_INPUT_COMMITS):
         raise NotImplementedError()
 
 
-def commit_to_state(commit: Commit, max_length=NUM_INPUT_COMMITS):
+def commit_to_state(commit: Commit,
+                    synthetic_training=False,
+                    max_length=NUM_INPUT_COMMITS):
     '''
     Converts a commit to a tensor that stores features about the commit and
     its previous commits
     '''
-    commits = get_previous_commits(commit, num_commits=NUM_INPUT_COMMITS - 1)
+    commits = get_previous_commits(commit, num_commits=max_length - 1)
     commits.append(commit)
 
     # keep adding the original commit if there are less than max_length commits
     # preceding the commit
-    while len(commits) < NUM_INPUT_COMMITS:
+    while len(commits) < max_length:
         commits.append(commit)
 
     # sort by id, so that the latest commit is first
     commits.sort(key=lambda commit: commit.id, reverse=True)
 
-    input_tensor = []
+    state_tensor = []
     for commit in commits:
-        input_tensor.append(commit_to_tensor(commit))
+        # used the cached tensor if it exists.  Otherwise, create it
+        state_tensor.append(commit_to_tensor(commit))
 
-    numpy.asarray(input_tensor)
+    if synthetic_training:
+        _prepare_state_for_synthetic_training(commit, state_tensor)
+
+    return numpy.asarray(state_tensor)
+
+
+def _prepare_state_for_synthetic_training(commit, state_tensor):
+    '''
+    Prepares a state tensor for synthetic training by performing the following
+    operations:
+
+        1) Sets all tests to status 'not run'
+        2) Adds noise to which functions were altered.  In synthetic training,
+           we only added 'assert False' to functions.  In real life, developers
+           do not add breaking changes to every function they touch (hopefully).
+           So mimic this, we will update the tensor so that it seems other
+           methods were also changed
+    '''
+    logger.info('Adding noise and setting tests results to not run')
+    # set all tests to status 'not run'
+    state_tensor[0][:, :, TEST_STATUS_LOC] = (
+        TEST_STATUS_TO_ID_MAP[TEST_OUTPUT_NOT_RUN])
+
+    # add noise to which functions were altered
+    num_noise = random.randint(0, min(15, commit.num_functions))
+
+    for _ in range(num_noise):
+        # choose a function to set to 1, meaning it was altered
+        func_to_alter = random.randint(0, commit.num_functions - 1)
+        state_tensor[0][func_to_alter:, :, FUNCTION_ALTERED_LOC] = 1
 
 
 class BugBuddyEnvironment(Env):
@@ -208,14 +275,14 @@ class BugBuddyEnvironment(Env):
     An environment is the commit and interacting with that commit such as
     running tests against it and assigning blame
     '''
-    def __init__(self, repository: Repository, is_synthetic_training=False):
+    def __init__(self, repository: Repository, synthetic_training=False):
         ''''
         Creates an environment from a commit
         '''
         # self.observation_space = spaces.Discrete(None)
         # self.action_space = spaces.Discrete(None)
         self.repository = repository
-        self.is_synthetic_training = is_synthetic_training
+        self.synthetic_training = synthetic_training
 
         self.session = Session.object_session(repository)
 
@@ -228,16 +295,22 @@ class BugBuddyEnvironment(Env):
 
         self.session = Session.object_session(commit)
         self.commit = commit
-        self.state = commit_to_state(commit)
+        self.state = commit_to_state(
+            commit,
+            synthetic_training=self.synthetic_training)
 
+        print('State shape: ', self.state.shape)
         # All tests are linked with a corresponding TestRun instance.  When
         # running the tests against this state
-        self.test_run = create(self.session, TestRun, commit=self.commit)
+        if not self.synthetic_training:
+            self.test_run = create(self.session, TestRun, commit=self.commit)
 
         # list of available tests, sorted in order of their id.  It is sorted
         # by the Test.id
         self.all_tests = get_list_of_tests(self.commit)
         self.all_tests.sort(key=lambda test: test.id, reverse=False)
+
+        self.total_rewards = 0
 
         # list of the tests that have already been ran for this commit
         self.tests_ran = []
@@ -268,11 +341,11 @@ class BugBuddyEnvironment(Env):
         # if we are in synthetic training, then we don't need to run the test.
         # We can simply retreive from the database whether or not the test is
         # failing.
-        if self.is_synthetic_training:
+        if self.synthetic_training:
             return self.synthetic_training_step(action)
         else:
             raise NotImplementedError(
-                'Currently you need to set is_synthetic_training to True since'
+                'Currently you need to set synthetic_training to True since'
                 'I have not implemented non-synthetic training steps yet')
 
     def get_reward(self, test_result: TestResult):
@@ -316,16 +389,16 @@ class BugBuddyEnvironment(Env):
         # punish the agent for being wasteful.  What is currently stored in the
         # state for the test should ideally be TEST_OUTPUT_NOT_RUN.
         if (self.get_current_status(test_result.test) != TEST_OUTPUT_NOT_RUN):
-            return -10
+            reward = -10
 
         # If the status is different from the previous commit's status and we
         # have already ruled out skips, then we should positively reward the
         # agent while also subtracting how many non-newly failing/passing tests
         # have already been ran.
-        if (self.test_status_changed(test_result.test)):
+        elif (self.test_status_changed(test_result.test)):
             # If this is out first test ran and it has a changed status
             if not self.tests_ran:
-                return 1
+                reward = 1
 
             # get the number of tests that have already been ran that had a new
             # status in comparison with the previous commit
@@ -333,11 +406,15 @@ class BugBuddyEnvironment(Env):
                 1 for test in self.tests_ran
                 if self.test_status_changed(test))
 
-            return 1 - (num_newly_changed_status / len(self.tests_ran))
+            reward = 1 - (num_newly_changed_status / len(self.tests_ran))
 
         # If the status is the same in this commit as it was in the previous
         # commit, simply return 0.
-        return 0
+        else:
+            reward = 0
+
+        self.total_rewards += reward
+        return reward
 
     def test_status_changed(self, test: Test) -> str:
         '''
@@ -352,8 +429,10 @@ class BugBuddyEnvironment(Env):
         '''
         # the location of the test in the state tensor
         state_test_id = self.get_state_test_id(test)
-        return TEST_STATUS_TO_ID_MAP[
-            self.state[0][state_test_id][TEST_STATUS_LOC]]
+        status_id = int(self.state[0][0][state_test_id][TEST_STATUS_LOC])
+        status_lookup = {value: key for key, value in
+                         TEST_STATUS_TO_ID_MAP.items()}
+        return status_lookup[status_id]
 
     def get_previous_status(self, test: Test) -> str:
         '''
@@ -361,15 +440,21 @@ class BugBuddyEnvironment(Env):
         '''
         # the location of the test in the state tensor
         state_test_id = self.get_state_test_id(test)
-        return TEST_STATUS_TO_ID_MAP[
-            self.state[1][state_test_id][TEST_STATUS_LOC]]
+        status_id = int(self.state[1][0][state_test_id][TEST_STATUS_LOC])
+        status_lookup = {value: key for key, value in
+                         TEST_STATUS_TO_ID_MAP.items()}
+        return status_lookup[status_id]
 
     def update_state(self, test_result: TestResult):
         '''
         Given the output of a test, update the state
         '''
-        state_test_id = self.get_state_test_id(test_result.test)
-        self.state[0][state_test_id][TEST_STATUS_LOC]
+        logger.info('Updating state for {test} with status {status}'
+                    .format(test=test_result.test,
+                            status=test_result.status))
+        result_id = TEST_STATUS_TO_ID_MAP[test_result.status]
+        test_index = self.get_state_test_id(test_result.test)
+        self.state[0][:, test_index:test_index, TEST_STATUS_LOC] = result_id
 
     def get_state_test_id(self, test):
         '''
@@ -392,12 +477,28 @@ class BugBuddyEnvironment(Env):
         '''
         return len(list(set(self.tests_ran))) == len(self.all_tests)
 
-    def synthetic_training_step(self, action):
+    def get_synthetic_test_result(self, test_to_run):
+        '''
+        Given a test to run, look and see for the synthetic test's history what
+        the result is
+        '''
+        assert len(self.commit.test_runs) == 1
+        test_run = self.commit.test_runs[0]
+        for test_result in test_run.test_results:
+            if test_result.test.id == test_to_run.id:
+                return test_result
+
+    def synthetic_training_step(self, action_id):
         '''
         Returns a tuple containing (new_state, reward, done, info)
+
+        @param: action_id.  This is the index of the test in the list of sorted
+        tests for a commit.
         '''
-        test_to_run = action
-        test_result = run_test(self.test_run, test_to_run)
+        test = self.all_tests[action_id]
+
+        test_result = self.get_synthetic_test_result(test)
+        assert test_result
 
         # determine the reward for running that particular test
         reward = self.get_reward(test_result)
@@ -407,6 +508,14 @@ class BugBuddyEnvironment(Env):
 
         # we can store extra debugging information here
         info_dict = {}
+        logger.info('{commit} -- {test} -> {status} | previously: {previous_status} | '
+                    'reward: {reward} | total: {total}'
+                    .format(commit=self.commit,
+                            test=test,
+                            previous_status=self.get_previous_status(test),
+                            status=test_result.status,
+                            reward=reward,
+                            total=self.total_rewards))
         return self.state, reward, self.done, info_dict
 
     def reset(self):
@@ -417,7 +526,7 @@ class BugBuddyEnvironment(Env):
             state (object): The initial state of the space. Initial reward is
                             assumed to be 0.
         '''
-        if self.is_synthetic_training:
+        if self.synthetic_training:
             # retrieve a random synthetic commit and set the environment to
             # that commit
             commit = (
@@ -429,8 +538,12 @@ class BugBuddyEnvironment(Env):
 
             # re-initialize the environment with the new commit
             self.set_commit(commit)
+
+            return self.state
         else:
-            raise NotImplementedError()
+            raise NotImplementedError(
+                'In _reset you need to set synthetic_training to True since'
+                'non-synthetic training steps are not implemented')
 
     def render(self, mode='human', close=False):
         '''
@@ -445,11 +558,17 @@ class BugBuddyEnvironment(Env):
         raise NotImplementedError()
 
 
-class BugBuddyProcessor(object):
+class BugBuddyProcessor(Processor):
     '''
     acts as a coupling mechanism between an Brain's agent and the environment
     '''
-    pass
+
+    def process_state_batch(self, batch):
+        '''
+        Given a state batch, I want to remove the second dimension, because it's
+        useless and prevents me from feeding the tensor into my CNN
+        '''
+        return numpy.squeeze(batch, axis=1)
 
 
 class Brain(object):
@@ -463,8 +582,8 @@ class Brain(object):
         '''
         self.weights_filename = 'brain_weights.h5f'
 
-        memory = SequentialMemory(limit=1000000, window_length=1)
-        # processor = BugBuddyProcessor()
+        memory = SequentialMemory(limit=1000, window_length=1)
+        processor = BugBuddyProcessor()
 
         number_of_tests = len(repository.tests)
 
@@ -474,21 +593,22 @@ class Brain(object):
             value_max=1.,
             value_min=.1,
             value_test=.05,
-            nb_steps=1000000)
+            nb_steps=100000)
 
         # Create the agent
         model = Sequential()
-        model.add(Convolution2D(256,
-                                (8, 8),
-                                strides=(4, 4),
-                                input_shape=get_input_shape(repository)[1:]))
+        model.add(Convolution3D(128,
+                                (4, 4, 4),
+                                strides=(3, 3, 3),
+                                # input_shape=get_input_shape(repository)))
+                                input_shape=(5, 337, 513, 3)))
         model.add(Activation('relu'))
-        model.add(Convolution2D(128, (4, 4), strides=(2, 2)))
-        model.add(Activation('relu'))
-        model.add(Convolution2D(64, (3, 3), strides=(1, 1)))
+        # model.add(Convolution3D(128, (3, 3, 3), strides=(2, 2, 2)))
+        # model.add(Activation('relu'))
+        model.add(Convolution3D(32, (1, 1, 1), strides=(1, 1, 1)))
         model.add(Activation('relu'))
         model.add(Flatten())
-        model.add(Dense(1024))
+        model.add(Dense(512))
         model.add(Activation('relu'))
         model.add(Dense(number_of_tests))
         model.add(Activation('linear'))
@@ -498,10 +618,10 @@ class Brain(object):
             nb_actions=number_of_tests,
             policy=policy,
             memory=memory,
-            # processor=processor,
-            nb_steps_warmup=50000,
+            processor=processor,
+            nb_steps_warmup=5000,
             gamma=.99,
-            target_model_update=10000,
+            target_model_update=1000,
             train_interval=4,
             delta_clip=1.)
 
@@ -518,13 +638,13 @@ class Brain(object):
         checkpoint_weights_filename = 'brain_weights_{step}.h5f'
         log_filename = 'brain_log.json'
         callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename,
-                                             interval=250000)]
+                                             interval=25000)]
         callbacks += [FileLogger(log_filename, interval=100)]
 
         # Training our agent
         self.agent.fit(env,
                        callbacks=callbacks,
-                       nb_steps=1750000,
+                       nb_steps=175000,
                        log_interval=10000)
 
         # After training is done, we save the final weights one more time.

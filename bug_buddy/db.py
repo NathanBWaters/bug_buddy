@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.schema import Base, Commit, Diff, Function, Repository
 

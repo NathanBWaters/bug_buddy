@@ -10,12 +10,12 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from bug_buddy.db import get_all, session_manager, delete
 from bug_buddy.logger import logger
-from bug_buddy.schema import Blame
+from bug_buddy.schema import Commit
 
 
 if __name__ == '__main__':
     with session_manager() as session:
-        blames = get_all(session, Blame)
+        commits = get_all(session, Commit)
         i = 1
         for blame in blames:
             print('On {} of {}'.format(i, len(blames)))

@@ -2,8 +2,8 @@
 '''
 The Commit model.  A record of a particular change in a repository's code
 '''
-
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
+import numpy
+from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, Binary
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 import sys
@@ -50,6 +50,8 @@ class Commit(Base):
     # diff ids and use that hash to retrieve the 'child' commits of a commit.
     synthetic_diff_hash = Column(Integer, nullable=True)
 
+    _commit_tensor_binary = Column('commit_tensor', Binary, nullable=True)
+
     test_runs = relationship('TestRun',
                              back_populates='commit',
                              cascade='all, delete, delete-orphan')
@@ -65,6 +67,8 @@ class Commit(Base):
         'Diff',
         back_populates='commit',
         cascade='all, delete, delete-orphan')
+
+    _commit_tensor_numpy = None
 
     def __init__(self,
                  repository: Repository,
@@ -186,11 +190,51 @@ class Commit(Base):
 
         return blames
 
+    @property
+    def commit_tensor(self):
+        '''
+        Returns the commit in tensor form as a numpy array
+        '''
+        if self._commit_tensor_numpy is None:
+            if self._commit_tensor_binary:
+                self._commit_tensor_numpy = numpy.fromstring(
+                    self._commit_tensor_binary)
+
+        return numpy.reshape(self._commit_tensor_numpy, self.input_shape)
+
     def needs_blaming(self):
         '''
         Whether the commit needs to undergo the blame process
         '''
         return self.causes_test_failures() and not self.blames
+
+    @property
+    def num_tests(self):
+        '''
+        Returns the number of tests present for the commit
+        '''
+        return len(self.repository.tests)
+
+    @property
+    def num_functions(self):
+        '''
+        Returns the number of functions present for the commit
+        '''
+        return len(self.repository.functions)
+
+    @property
+    def num_features(self):
+        '''
+        Returns the number of features for a given function-test union
+        '''
+        return 3
+
+    @property
+    def input_shape(self):
+        '''
+        Returns the input shape of a commit
+        '''
+        return (self.num_functions, self.num_tests, self.num_features)
 
     def has_same_test_result_output(self,
                                     test_result,
