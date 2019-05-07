@@ -421,7 +421,8 @@ class BugBuddyEnvironment(Env):
         Returns if the status for a test changed from the previous commit to the
         current commit
         '''
-        return self.get_current_status(test) == self.get_previous_status(test)
+        return not(self.get_current_status(test) !=
+                   self.get_previous_status(test))
 
     def get_current_status(self, test: Test) -> str:
         '''
@@ -499,6 +500,9 @@ class BugBuddyEnvironment(Env):
 
         test_result = self.get_synthetic_test_result(test)
         assert test_result
+
+        # store that we ran this test
+        self.tests_ran.append(test)
 
         # determine the reward for running that particular test
         reward = self.get_reward(test_result)
@@ -582,7 +586,7 @@ class Brain(object):
         '''
         self.weights_filename = 'brain_weights.h5f'
 
-        memory = SequentialMemory(limit=1000, window_length=1)
+        memory = SequentialMemory(limit=100, window_length=1)
         processor = BugBuddyProcessor()
 
         number_of_tests = len(repository.tests)
