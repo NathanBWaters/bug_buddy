@@ -5,11 +5,11 @@ The argparse subcommands
 from mock import Mock
 
 # from bug_buddy.ai.predict_test_failures import train
-from bug_buddy.brain import synthetic_train
+from bug_buddy.brain.predict import train
 from bug_buddy.cli import is_affirmative
 from bug_buddy.logger import logger
 from bug_buddy.db import create, get, delete, session_manager
-from bug_buddy.schema import Repository, Function, FunctionHistory, Commit
+from bug_buddy.schema import Repository
 from bug_buddy.git_utils import (
     db_and_git_match,
     delete_bug_buddy_branch,
@@ -19,9 +19,7 @@ from bug_buddy.git_utils import (
     set_bug_buddy_branch)
 from bug_buddy.source import sync_mirror_repo
 from bug_buddy.snapshot import snapshot
-from bug_buddy.synthetic_alterations import (
-    generate_synthetic_test_results,
-    create_synthetic_alterations)
+from bug_buddy.synthetic_alterations import generate_synthetic_test_results
 from bug_buddy.watcher import watch
 
 
@@ -32,7 +30,7 @@ def train_command(src_path: str):
     with session_manager() as session:
         repository = _get_repository_from_src_path(session, src_path)
         logger.info('Training repository: "{}"'.format(repository))
-        synthetic_train(repository)
+        train(repository)
 
 
 def watch_command(src_path: str, commit_only: bool):

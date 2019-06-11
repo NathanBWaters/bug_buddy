@@ -69,6 +69,13 @@ class TestRun(Base):
         return len(self.failed_tests)
 
     @property
+    def test_failures(self):
+        '''
+        Same thing as self.failed_tests
+        '''
+        return self.failed_tests
+
+    @property
     def failed_tests(self):
         '''
         Returns the list of failed tests in this test run

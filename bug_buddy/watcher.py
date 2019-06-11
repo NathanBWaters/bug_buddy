@@ -4,11 +4,11 @@ The watcher records a developer's changes
 import os
 import time
 from watchdog.observers import Observer
-from watchdog.events import LoggingEventHandler, PatternMatchingEventHandler
+from watchdog.events import PatternMatchingEventHandler
 
-from bug_buddy.constants import MIRROR_ROOT
+from bug_buddy.brain import Brain
 from bug_buddy.db import get, session_manager
-from bug_buddy.git_utils import run_cmd, is_repo_clean, set_bug_buddy_branch
+from bug_buddy.git_utils import is_repo_clean, set_bug_buddy_branch
 from bug_buddy.logger import logger
 from bug_buddy.schema import Repository
 from bug_buddy.snapshot import snapshot
@@ -31,8 +31,9 @@ class ChangeWatchdog(PatternMatchingEventHandler):
         self.commit_only = commit_only
 
         self.score_card = Scorecard()
+        self.score_card.render(clear=True)
 
-        self.score_card.render()
+        self.brain = Brain(repository)
 
     def on_any_event(self, event):
         '''
@@ -58,12 +59,18 @@ class ChangeWatchdog(PatternMatchingEventHandler):
                 logger.info('Valid change event: {}'.format(event))
 
                 # make sure the repository is on the bug_buddy branch
-                # commit = snapshot(repository, commit_only=self.commit_only)
-                # print('Completed snapshot of {}'.format(commit))
-                # session.commit()
+                start = time.time()
+                commit = snapshot(repository, commit_only=self.commit_only)
+                total_time = time.time() - start
+                logger.info('Completed snapshot of {commit} in {m}m {s}s'
+                            .format(commit=commit,
+                                    m=total_time / 60,
+                                    s=total_time % 60))
+                session.commit()
 
                 # run the tests in a smart order
-                # TODO
+                self.brain.set_commit(commit)
+                self.brain.act()
 
                 # display the results in the cli output
                 # self.score_card.render(commit)

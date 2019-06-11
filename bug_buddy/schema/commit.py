@@ -115,12 +115,7 @@ class Commit(Base):
         '''
         Returns a bool if the commit causes any test failures
         '''
-        for test_run in self.test_runs:
-            for test_result in test_run.test_results:
-                if test_result.status == TEST_OUTPUT_FAILURE:
-                    return True
-
-        return False
+        return bool(self.test_failures)
 
     def get_function_histories(self,
                                file_path: str,
@@ -214,6 +209,19 @@ class Commit(Base):
         Returns the number of tests present for the commit
         '''
         return len(self.repository.tests)
+
+    @property
+    def test_failures(self):
+        '''
+        Returns the number of tests present for the commit
+        '''
+        test_failures = []
+        for test_run in self.test_runs:
+            for test_result in test_run.test_results:
+                if test_result.status == TEST_OUTPUT_FAILURE:
+                    test_failures.append(test_result.test)
+
+        return test_failures
 
     @property
     def num_functions(self):

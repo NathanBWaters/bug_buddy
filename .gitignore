@@ -1,5 +1,7 @@
 bug_buddy.db
 
+bug_buddy/brain/models/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

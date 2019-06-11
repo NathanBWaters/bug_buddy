@@ -33,12 +33,14 @@ class Scorecard(Terminal):
         return self.num_correct_total / (
             float(self.num_correct_total + self.num_incorrect_total))
 
-    def render(self, commit: Commit=None):
+    def render(self, commit: Commit=None, clear=False):
         '''
         Renders the current state at a commit
         '''
         with self.fullscreen():
-            self.clear()
+            if clear:
+                self.clear()
+
             print("")
             print('    🐞 ' + self.underline("BugBuddy"))
 
