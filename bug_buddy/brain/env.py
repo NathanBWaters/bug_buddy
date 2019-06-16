@@ -5,7 +5,7 @@ from gym import Env
 
 from bug_buddy.brain.utils import (
     commit_to_state,
-    get_random_commits,
+    get_commits,
     TEST_STATUS_TO_ID_MAP,
     TEST_STATUS_LOC)
 from bug_buddy.constants import TEST_OUTPUT_NOT_RUN
@@ -284,7 +284,7 @@ class ChangeEnvironment(Env):
         if self.synthetic_training:
             # retrieve a random synthetic commit and set the environment to
             # that commit
-            commit = get_random_commits(
+            commit = get_commits(
                 self.repository, num_commits=1, synthetic=True)
             # re-initialize the environment with the new commit
             self.set_commit(commit)

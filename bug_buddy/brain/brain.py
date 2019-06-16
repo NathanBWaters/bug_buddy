@@ -4,6 +4,7 @@ This is the core class for performing operations on a code repository such as:
     2) Assigning blame
     3) Binary searching through a code repository to uncover bugs
 '''
+from bug_buddy.brain.predict_tests import predict_test_output
 from bug_buddy.schema import Repository, Commit
 
 
@@ -35,9 +36,10 @@ class Brain(object):
         '''
         self.commit = commit
 
-    def act(self, env):
+    def act(self):
         '''
         Performs an action.  For right now, this means it runs a test against
         a commit
         '''
         print('do')
+        predict_test_output(self.commit)

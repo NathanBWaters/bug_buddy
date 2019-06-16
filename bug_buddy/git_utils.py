@@ -1,14 +1,12 @@
 '''
 Git utility methods
 '''
-import difflib
 from git import Repo
 from git.cmd import Git
 import os
 import subprocess
 from typing import List
 
-from bug_buddy.schema.aliases import DiffList
 from bug_buddy.cli import is_affirmative
 from bug_buddy.constants import (
     DEVELOPER_CHANGE,
@@ -16,13 +14,12 @@ from bug_buddy.constants import (
 from bug_buddy.db import (
     create,
     get,
-    get_or_create_diff,
     get_all,
     delete,
     Session)
 from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
-from bug_buddy.schema import Commit, Diff, Repository, Function
+from bug_buddy.schema import Commit, Repository
 
 
 def db_and_git_match(repository: Repository,
@@ -352,6 +349,22 @@ def revert_to_master(repository: Repository):
     run_cmd(repository, 'git reset {}'.format(repository.path))
 
     return
+
+
+def go_to_commit(repository: Repository, commit: Commit, force=False):
+    '''
+    Sets the repository to a specific commit
+    '''
+    if not is_repo_clean(repository):
+        if force:
+            revert_to_master(repository)
+        else:
+            msg = ('You tried to go to commit {} but the repository is not clean'
+                   .format(commit.commit_id))
+            raise BugBuddyError(msg)
+
+    logger.info('Setting {} to commit {}'.format(repository, commit.commit_id))
+    run_cmd(repository, 'git checkout {}'.format(commit.commit_id))
 
 
 def create_reset_commit(repository: Repository):

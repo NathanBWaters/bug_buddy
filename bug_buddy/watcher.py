@@ -6,11 +6,14 @@ import time
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 
-from bug_buddy.brain import Brain
+from bug_buddy.brain import Brain, predict_blame
 from bug_buddy.db import get, session_manager
-from bug_buddy.git_utils import is_repo_clean, set_bug_buddy_branch
+from bug_buddy.git_utils import (
+    go_to_commit,
+    is_repo_clean,
+    set_bug_buddy_branch)
 from bug_buddy.logger import logger
-from bug_buddy.schema import Repository
+from bug_buddy.schema import Repository, Commit
 from bug_buddy.snapshot import snapshot
 from bug_buddy.scorecard import Scorecard
 from bug_buddy.source import sync_mirror_repo
@@ -80,6 +83,25 @@ class ChangeWatchdog(PatternMatchingEventHandler):
 
 
 def watch(repository: Repository, commit_only: bool):
+    '''
+    Watches the repository's filesystem for changes and records the changes.
+    It also notifies the user when there is an update in the test output.
+    '''
+    set_bug_buddy_branch(repository)
+    logger.info('Starting BugBuddy thingy')
+
+    with session_manager() as session:
+        commit = get(session, Commit, id=1809)
+        commit.summary()
+        go_to_commit(repository, commit, force=True)
+
+        for test_failure in commit.failed_test_results:
+            predict_blame(test_failure)
+            test_failure.summary()
+            print(test_failure.blamed_function_prediction)
+
+
+def _watch(repository: Repository, commit_only: bool):
     '''
     Watches the repository's filesystem for changes and records the changes.
     It also notifies the user when there is an update in the test output.

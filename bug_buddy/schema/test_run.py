@@ -4,10 +4,8 @@ The TestRun model.  Represents a run of multiple tests against a single commit.
 This is important because you can have multiple TestRun instances against a
 single commit
 '''
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, ForeignKey, Integer
 from sqlalchemy.orm import relationship
-import textwrap
 import time
 
 from bug_buddy.constants import (TEST_OUTPUT_FAILURE,
@@ -69,6 +67,13 @@ class TestRun(Base):
         return len(self.failed_tests)
 
     @property
+    def test_results_ordered(self):
+        '''
+        Returns the test test results ordered by their test id
+        '''
+        return sorted(self.test_results, key=lambda x: x.test.id, reverse=False)
+
+    @property
     def test_failures(self):
         '''
         Same thing as self.failed_tests
@@ -80,8 +85,8 @@ class TestRun(Base):
         '''
         Returns the list of failed tests in this test run
         '''
-        return [test for test in self.test_results
-                if test.status == TEST_OUTPUT_FAILURE]
+        return [test_result for test_result in self.test_results
+                if test_result.status == TEST_OUTPUT_FAILURE]
 
     @property
     def num_skipped_tests(self):
@@ -97,6 +102,15 @@ class TestRun(Base):
         '''
         return [test for test in self.test_results
                 if test.status == TEST_OUTPUT_SKIPPED]
+
+    def summary(self, indent=0):
+        '''
+        Prints a summary to terminal about this test run
+        '''
+        print(' ' * indent + str(self))
+        print(' ' * indent + 'Failed tests:')
+        for failed_test in self.failed_tests:
+            failed_test.summary(indent=indent + 2)
 
     def __repr__(self):
         '''

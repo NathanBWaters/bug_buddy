@@ -9,7 +9,7 @@ from bug_buddy import commands
 
 def _train(args):
     '''
-    Parses arguments and passes them to the train subcommand module
+    Parses arguments and passes them to the train subcommand
 
     @param args: the argparse arguments
     '''
@@ -18,7 +18,7 @@ def _train(args):
 
 def _watch(args):
     '''
-    Parses arguments and passes them to the train subcommand module
+    Parses arguments and passes them to the train subcommand
 
     @param args: the argparse arguments
     '''
@@ -27,16 +27,34 @@ def _watch(args):
 
 def _analyze(args):
     '''
-    Parses arguments and passes them to the analyze subcommand module
+    Parses arguments and passes them to the analyze subcommand
 
     @param args: the argparse arguments
     '''
     commands.analyze_command(args.path.strip())
 
 
+def _do(args):
+    '''
+    Parses arguments and passes them to the analyze subcommand
+
+    @param args: the argparse arguments
+    '''
+    commands.do_command(args.path.strip())
+
+
+def _test(args):
+    '''
+    Parses arguments and passes them to the test subcommand
+
+    @param args: the argparse arguments
+    '''
+    commands.test_command(args.path.strip())
+
+
 def _delete(args):
     '''
-    Parses arguments and passes them to the analyze subcommand module
+    Parses arguments and passes them to the analyze subcommand
 
     @param args: the argparse arguments
     '''
@@ -45,7 +63,7 @@ def _delete(args):
 
 def _generate(args):
     '''
-    Parses arguments and passes them to the generate subcommand module
+    Parses arguments and passes them to the generate subcommand
 
     @param args: the argparse arguments
     '''
@@ -56,7 +74,7 @@ def _generate(args):
 
 def _initialize(args):
     '''
-    Parses arguments and passes them to the initialize subcommand module
+    Parses arguments and passes them to the initialize subcommand
 
     @param args: the argparse arguments
     '''
@@ -160,6 +178,32 @@ if __name__ == '__main__':
         'path',
         type=str,
         help='Path to the repository you want to train')
+
+    ###################################
+    #  Train SubCommand
+    ###################################
+    do_command = subparsers.add_parser(
+        'do',
+        description='does stuff',
+        help=('does stuff'))
+    do_command.set_defaults(func=_do)
+    do_command.add_argument(
+        'path',
+        type=str,
+        help='Path to the repository you want to do stuff to')
+
+    ###################################
+    #  Test SubCommand
+    ###################################
+    test_command = subparsers.add_parser(
+        'test',
+        description='tests a repository optimally',
+        help=('tests on the available data for a repository'))
+    test_command.set_defaults(func=_test)
+    test_command.add_argument(
+        'path',
+        type=str,
+        help='Path to the repository you want to test')
 
     ###################################
     #  Watch SubCommand

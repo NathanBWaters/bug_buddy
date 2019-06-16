@@ -51,6 +51,6 @@ class Blame(Base):
         '''
         Converts the Blame into a string
         '''
-        return ('<Blame {test_result} | {diff}/>'
-                .format(diff=self.diff,
-                        test_result=self.test_result))
+        return ('<Blame {test} | {function} />'
+                .format(function=self.diff.function,
+                        test=self.test_result.test))

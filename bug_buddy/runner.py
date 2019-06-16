@@ -7,11 +7,10 @@ import subprocess
 import time
 
 from bug_buddy.collection import create_results_from_junit_xml
-from bug_buddy.db import session_manager, create, Session
+from bug_buddy.db import create, Session
 from bug_buddy.git_utils import run_cmd
-from bug_buddy.errors import BugBuddyError
 from bug_buddy.logger import logger
-from bug_buddy.schema import Repository, TestRun, Test, Commit, TestResult
+from bug_buddy.schema import TestRun, Test, Commit, TestResult
 
 
 def get_list_of_tests(commit: Commit) -> TestResult:

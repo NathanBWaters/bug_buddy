@@ -7,7 +7,8 @@ import random
 
 from bug_buddy.brain.utils import (
     commit_to_state,
-    get_random_commits,
+    get_commits,
+    get_output_dir,
     set_functions_altered_noise,
     set_tests_not_run_noise,
     NUM_INPUT_COMMITS)
@@ -15,6 +16,12 @@ from bug_buddy.constants import SYNTHETIC_CHANGE
 from bug_buddy.db import get, session_manager
 from bug_buddy.logger import logger
 from bug_buddy.schema import Commit, Repository
+
+
+numpy.set_printoptions(suppress=True)
+TEST_PREDICTION_MODEL = 'predict_tests.h5'
+
+test_result_prediction_model = None
 
 
 def commit_generator(repository_id: int, batch_size: int):
@@ -26,7 +33,7 @@ def commit_generator(repository_id: int, batch_size: int):
         while True:
             features = []
             labels = []
-            commits = get_random_commits(
+            commits = get_commits(
                 repository, num_commits=batch_size, synthetic=True)
 
             for commit in commits:
@@ -78,7 +85,7 @@ def train(repository: Repository):
 
     generator = commit_generator(repository.id, batch_size)
 
-    checkpoint_weights_filename = 'predict_weights_{epoch}.h5f'
+    checkpoint_weights_filename = get_output_dir('predict_weights_{epoch}.h5f')
 
     callbacks = [
         ModelCheckpoint(checkpoint_weights_filename, period=3),
@@ -91,19 +98,33 @@ def train(repository: Repository):
         epochs=40,
         steps_per_epoch=batch_size)
 
-    # evaluate the model
-    validation_features, validation_labels = get_validation_data(repository)
-    scores = model.evaluate(validation_features, validation_labels)
-    print("\n%s: %.2f%%" % (model.metrics_names[1], scores[1] * 100))
+    model.save(get_output_dir(TEST_PREDICTION_MODEL))
 
-    model.save('predict.h5')
+    validate(repository)
 
 
-def predict(commit: Commit):
+def predict_test_output(commit: Commit):
     '''
     Predicts using the model
     '''
-    pass
+    from keras.models import load_model
+    model = load_model(get_output_dir(TEST_PREDICTION_MODEL))
+    feature = commit_to_state(commit)
+    prediction_vector = model.predict(numpy.array([feature, ]))
+    commit.test_result_prediction_data = prediction_vector[0].tolist()
+    print('predictions: ', commit.test_result_prediction)
+
+
+def validate(repository):
+    '''
+    Validates a model against a repository
+    '''
+    from keras.models import load_model
+    model = load_model(get_output_dir(TEST_PREDICTION_MODEL))
+    commits, validation_features, validation_labels = get_validation_data(repository)
+    import pdb; pdb.set_trace()
+    scores = model.evaluate(validation_features, validation_labels)
+    print("\n%s: %.2f%%" % (model.metrics_names[1], scores[1] * 100))
 
 
 def get_validation_data(repository: Repository):
@@ -137,7 +158,8 @@ def get_validation_data(repository: Repository):
         validation_features.append(feature)
         validation_labels.append(label)
 
-    return (numpy.stack(validation_features),
+    return (commits,
+            numpy.stack(validation_features),
             numpy.stack(validation_labels))
 
 

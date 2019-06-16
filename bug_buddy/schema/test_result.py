@@ -3,11 +3,11 @@
 The TestResult model.  The pass/fail for a test at a particular commit.
 '''
 from sqlalchemy import Column, ForeignKey, Integer, String, Float
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
 from bug_buddy.constants import TEST_OUTPUT_FAILURE
 from bug_buddy.schema.base import Base
+from bug_buddy.errors import BugBuddyError
 from bug_buddy.schema.test import Test
 from bug_buddy.schema.test_run import TestRun
 
@@ -43,6 +43,8 @@ class TestResult(Base):
         cascade='all, delete, delete-orphan'
     )
 
+    blamed_function_prediction_vector = None
+
     # we need a unique constraint on test results
     @property
     def failed(self):
@@ -59,6 +61,28 @@ class TestResult(Base):
         self.test_run = test_run
         self.status = status
         self.time = time
+
+    @property
+    def blamed_function_prediction(self):
+        '''
+        Returns test result prediction data
+        '''
+        if self.blamed_function_prediction_vector is None:
+            msg = 'Requested prediction data but it does not exist'
+            raise BugBuddyError(msg)
+
+        prediction_dict = dict(zip(self.test_run.commit.functions,
+                                   self.blamed_function_prediction_vector))
+
+        return sorted(prediction_dict.items(), key=lambda x: x[1], reverse=True)[: 5]
+
+    def summary(self, indent=0):
+        '''
+        Prints a summary to terminal about this test run
+        '''
+        print(' ' * indent + str(self))
+        for blame in self.blames:
+            print((' ' * (indent + 2)) + str(blame))
 
     def __repr__(self):
         '''

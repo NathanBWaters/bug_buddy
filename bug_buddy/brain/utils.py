@@ -2,6 +2,7 @@
 Utilities for training our models
 '''
 from __future__ import division
+import os
 import numpy
 import random
 from sqlalchemy import desc
@@ -15,10 +16,7 @@ from bug_buddy.constants import (
     TEST_OUTPUT_SKIPPED)
 from bug_buddy.db import Session
 from bug_buddy.logger import logger
-from bug_buddy.schema import (
-    Repository,
-    Commit,
-    Blame)
+from bug_buddy.schema import Repository, Commit, Blame, Function, Test
 
 
 # the number of commits that are fed into the neural network
@@ -29,12 +27,27 @@ FUNCTION_ALTERED_LOC = 0
 TEST_STATUS_LOC = 1
 BLAME_COUNT_LOC = 2
 
+# Total number of features
+NUM_FEATURES = 3
+
 TEST_STATUS_TO_ID_MAP = {
     TEST_OUTPUT_NOT_RUN: 0,
     TEST_OUTPUT_SKIPPED: 1,
     TEST_OUTPUT_FAILURE: 2,
     TEST_OUTPUT_SUCCESS: 3,
 }
+
+
+def get_output_dir(file_name: str=None):
+    '''
+    Returns the path to the output directory
+    '''
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                              'models')
+    if file_name:
+        output_dir = os.path.join(output_dir, file_name)
+
+    return output_dir
 
 
 def cache_commits(repository: Repository):
@@ -58,8 +71,20 @@ def get_input_shape(repository: Repository):
     '''
     num_functions = len(repository.functions)
     num_tests = len(repository.tests)
-    num_features = 3
-    return (NUM_INPUT_COMMITS, num_functions, num_tests, num_features)
+    return (NUM_INPUT_COMMITS, num_functions, num_tests, NUM_FEATURES)
+
+
+def get_test_function_blame_count(function: Function, test: Test):
+    '''
+    Returns the number of times a function change has been blamed for a test
+    '''
+    # A blame is made up of diff id and test result id, so given a test and a
+    # function means we have to do some expensive queries
+    session = Session.object_session(function)
+    return (session.query(Blame)
+                   .filter(Blame.function_id == function.id)
+                   .filter(Blame.test_id == test.id)
+                   .count())
 
 
 def get_blame_counts_for_function(function):
@@ -77,6 +102,25 @@ def get_blame_counts_for_function(function):
     blame_dict = {}
     for test_id, blame_count in blames:
         blame_dict[test_id] = blame_count
+
+    return blame_dict
+
+
+def get_blame_counts_for_tests(test: Test):
+    '''
+    Returns the number of times a function change has been blamed for a test
+    '''
+    # A blame is made up of diff id and test result id, so given a test and a
+    # function means we have to do some expensive queries
+    session = Session.object_session(test)
+    blames = (session.query(Blame.function_id, func.count(Blame.function_id))
+                     .filter(Blame.test_id == test.id)
+                     .group_by(Blame.function_id)
+                     .all())
+
+    blame_dict = {}
+    for function_id, blame_count in blames:
+        blame_dict[function_id] = blame_count
 
     return blame_dict
 
@@ -118,10 +162,9 @@ def commit_to_tensor(commit):
     #   function_altered
     #   test_status
     #   blame_count
-    num_function_test_features = 3
     commit_tensor = numpy.zeros((len(sorted_functions),
                                  len(sorted_tests),
-                                 num_function_test_features))
+                                 NUM_FEATURES))
 
     # store the results of the tests for the commit in a dictionary for quick
     # lookup
@@ -248,7 +291,7 @@ def set_tests_not_run_noise(state_tensor, num_noise=None):
             TEST_STATUS_TO_ID_MAP[TEST_OUTPUT_NOT_RUN])
 
 
-def get_random_commits(repository, num_commits=10, synthetic=True):
+def get_commits(repository, num_commits=None, synthetic=True):
     '''
     Returns a list of commits randomly retrieved from the database
     '''
@@ -258,5 +301,9 @@ def get_random_commits(repository, num_commits=10, synthetic=True):
     if synthetic:
         query = query.filter(Commit.commit_type == SYNTHETIC_CHANGE)
 
-    return query.order_by(func.random()).limit(num_commits).all()
+    if num_commits:
+        return query.order_by(func.random()).limit(num_commits).all()
+
+    else:
+        return query.all()
 

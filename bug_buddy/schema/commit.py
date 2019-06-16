@@ -3,9 +3,8 @@
 The Commit model.  A record of a particular change in a repository's code
 '''
 import numpy
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, Binary
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, ForeignKey, Integer, String, Binary
+from sqlalchemy.orm import relationship, deferred
 import sys
 
 from bug_buddy.errors import BugBuddyError
@@ -50,7 +49,12 @@ class Commit(Base):
     # diff ids and use that hash to retrieve the 'child' commits of a commit.
     synthetic_diff_hash = Column(Integer, nullable=True)
 
-    _commit_tensor_binary = Column('commit_tensor', Binary, nullable=True)
+    # this stores the commit tensor for determining which tests are going to
+    # fail.  We used the 'deferred' function so that it's loaded lazily and not
+    # always brought into memory.  For more information, read:
+    #   https://docs.sqlalchemy.org/en/13/orm/loading_columns.html
+    _commit_tensor_binary = deferred(
+        Column('commit_tensor', Binary, nullable=True))
 
     test_runs = relationship('TestRun',
                              back_populates='commit',
@@ -69,6 +73,9 @@ class Commit(Base):
         cascade='all, delete, delete-orphan')
 
     _commit_tensor_numpy = None
+
+    # the raw numpy vector output from the model
+    test_result_prediction_data = None
 
     def __init__(self,
                  repository: Repository,
@@ -186,6 +193,13 @@ class Commit(Base):
         return blames
 
     @property
+    def latest_test_run(self):
+        '''
+        Returns the most recent test run
+        '''
+        return self.test_runs[-1]
+
+    @property
     def commit_tensor(self):
         '''
         Returns the commit in tensor form as a numpy array
@@ -211,17 +225,41 @@ class Commit(Base):
         return len(self.repository.tests)
 
     @property
+    def functions(self):
+        '''
+        Returns the functions associated with the commit in order
+        '''
+        functions = self.repository.functions
+        functions.sort(key=lambda func: func.id, reverse=False)
+        return functions
+
+    @property
     def test_failures(self):
         '''
-        Returns the number of tests present for the commit
+        Returns a list of tests that failed in the latest test run for the
+        commit
         '''
         test_failures = []
-        for test_run in self.test_runs:
-            for test_result in test_run.test_results:
-                if test_result.status == TEST_OUTPUT_FAILURE:
-                    test_failures.append(test_result.test)
+        test_run = self.latest_test_run
+        for test_result in test_run.test_results:
+            if test_result.status == TEST_OUTPUT_FAILURE:
+                test_failures.append(test_result.test)
 
         return test_failures
+
+    @property
+    def failed_test_results(self):
+        '''
+        Returns a list of test results of failed tests in the latest test run
+        for the commit
+        '''
+        failed_test_results = []
+        test_run = self.latest_test_run
+        for test_result in test_run.test_results:
+            if test_result.status == TEST_OUTPUT_FAILURE:
+                failed_test_results.append(test_result)
+
+        return failed_test_results
 
     @property
     def num_functions(self):
@@ -244,6 +282,26 @@ class Commit(Base):
         '''
         return (self.num_functions, self.num_tests, self.num_features)
 
+    @property
+    def test_result_prediction(self):
+        '''
+        Returns test result prediction data
+        '''
+        if self.test_result_prediction_data is None:
+            msg = 'Requested prediction data but it does not exist'
+            raise BugBuddyError(msg)
+
+        return dict(zip(self.sorted_tests, self.test_result_prediction_data))
+
+    @property
+    def sorted_tests(self):
+        '''
+        Returns the tests sorted by id
+        '''
+        sorted_tests = self.repository.tests
+        sorted_tests.sort(key=lambda test: test.id, reverse=False)
+        return sorted_tests
+
     def has_same_test_result_output(self,
                                     test_result,
                                     status: str=None):
@@ -262,6 +320,14 @@ class Commit(Base):
                 test_result.status == status)
 
         return matching_test_result.status == test_result.status
+
+    def summary(self, indent=0):
+        '''
+        Prints a summary to terminal about this commit
+        '''
+        print(' ' * indent + str(self))
+        print(' ' * indent + 'Number of test runs: {}'.format(len(self.test_runs)))
+        self.latest_test_run.summary(indent=indent + 2)
 
     def __repr__(self):
         '''
