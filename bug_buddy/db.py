@@ -2,14 +2,13 @@
 '''
 Code for communicating with the bug_buddy database
 '''
-import ast
 from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
+from sqlalchemy.sql.expression import func
 
 from bug_buddy.errors import BugBuddyError
-from bug_buddy.schema import Base, Commit, Diff, Function, Repository
+from bug_buddy.schema import Base, Diff, Repository
 
 
 # Create an engine that stores data in the local directory's
@@ -46,13 +45,20 @@ def get(session, sql_class, **kwargs):
     return class_instance
 
 
-def get_all(session, sql_class, **kwargs):
+def get_all(session, sql_class, limit=None, random=False, **kwargs):
     '''
     Used to get all instances of a class that matche the kwargs parameters
     '''
     query = session.query(sql_class)
-    class_instances = query.filter_by(**kwargs).all()
-    return class_instances
+    query = query.filter_by(**kwargs)
+
+    if random:
+        query = query.order_by(func.random())
+
+    if limit:
+        query = query.limit(limit)
+
+    return query.all()
 
 
 def create(session, sql_class, **kwargs):

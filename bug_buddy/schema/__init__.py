@@ -2,6 +2,11 @@
 '''
 One stop shop for importing all of our models
 '''
+from . aliases import (
+    DiffList,
+    CommitList,
+    FunctionList,
+    FunctionHistoryList)
 from . base import Base
 from . blame import Blame
 from . commit import Commit

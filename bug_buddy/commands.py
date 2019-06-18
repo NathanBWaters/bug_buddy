@@ -5,7 +5,7 @@ The argparse subcommands
 from mock import Mock
 
 # from bug_buddy.ai.predict_test_failures import train
-from bug_buddy.brain.predict_blame import train, write_records
+from bug_buddy.brain.predict_blame import train, cache_test_results
 from bug_buddy.cli import is_affirmative
 from bug_buddy.logger import logger
 from bug_buddy.db import create, get, delete, session_manager
@@ -40,7 +40,7 @@ def do_command(src_path: str):
     with session_manager() as session:
         repository = _get_repository_from_src_path(session, src_path)
         logger.info('Doing stuff to repository: "{}"'.format(repository))
-        write_records(repository)
+        cache_test_results(repository)
 
 
 def watch_command(src_path: str, commit_only: bool):

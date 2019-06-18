@@ -2,20 +2,15 @@
 '''
 The repository model.  Corresponds with a library of code
 '''
-import ast
 import os
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship
 
 from bug_buddy.constants import (
     BASE_SYNTHETIC_CHANGE,
-    MIRROR_ROOT,
-    PYTHON_FILE_TYPE)
+    MIRROR_ROOT)
 from bug_buddy.constants import FILE_TYPES
-from bug_buddy.errors import BugBuddyError
 from bug_buddy.schema.base import Base
-from bug_buddy.schema.function import Function
 
 
 class Repository(Base):
@@ -61,6 +56,10 @@ class Repository(Base):
         cascade='all, delete, delete-orphan')
     functions = relationship(
         'Function',
+        back_populates='repository',
+        cascade='all, delete, delete-orphan')
+    test_results = relationship(
+        'TestResult',
         back_populates='repository',
         cascade='all, delete, delete-orphan')
 

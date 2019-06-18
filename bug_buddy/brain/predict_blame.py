@@ -4,6 +4,17 @@ a commit.
 '''
 import numpy
 import random
+import sys
+import tensorflow as tf
+# importing Keras from Tensorflow is necessary for transforming a Keras
+# model into an Estimator
+import tensorflow as tensorflow
+tensorflow.enable_eager_execution()
+from tensorflow.train import AdamOptimizer
+from tensorflow.python.keras.models import Sequential, load_model
+from tensorflow.python.keras.callbacks import ModelCheckpoint
+from tensorflow.python.keras.layers import Dense, Activation
+
 
 from bug_buddy.brain.utils import (
     commit_to_state,
@@ -15,23 +26,21 @@ from bug_buddy.brain.utils import (
     # NUM_INPUT_COMMITS,
     # NUM_FEATURES
 )
-from bug_buddy.constants import SYNTHETIC_CHANGE
-from bug_buddy.db import get, session_manager
+from bug_buddy.blaming import get_synthetic_children_commits
+from bug_buddy.constants import SYNTHETIC_CHANGE, TEST_OUTPUT_FAILURE
+from bug_buddy.db import get, session_manager, Session, get_all
 from bug_buddy.logger import logger
-from bug_buddy.schema import Commit, Repository, TestResult
+from bug_buddy.schema import (
+    Commit,
+    CommitList,
+    Function,
+    Repository,
+    TestResult)
 
-import tensorflow as tf
-# importing Keras from Tensorflow is necessary for transforming a Keras
-# model into an Estimator
-import tensorflow as tensorflow
-tensorflow.enable_eager_execution()
-from tensorflow.train import AdamOptimizer
-from tensorflow.python.keras.models import Sequential
-from tensorflow.python.keras.callbacks import ModelCheckpoint
-from tensorflow.python.keras.layers import Dense, Activation
 
-numpy.set_printoptions(suppress=True, precision=4)
-BLAME_PREDICTION_MODEL = 'predict_blame_{attempt_id}.h5'
+numpy.set_printoptions(suppress=True, precision=4, threshold=sys.maxsize)
+BLAME_PREDICTION_MODEL_FILE = 'predict_blame_{attempt_id}.h5'
+BLAME_PREDICTION_MODEL = None
 
 test_result_prediction_model = None
 
@@ -59,7 +68,6 @@ def write_records(repository: Repository):
     for commit in commits:
         print('Doing commit: {}'.format(commit))
         for failed_result in commit.failed_test_results:
-
             feature = test_failure_to_feature(failed_result)
             label = test_failure_to_label(failed_result)
 
@@ -74,6 +82,26 @@ def write_records(repository: Repository):
     writer.close()
 
 
+def cache_test_results(repository: Repository):
+    '''
+    Writes the training data to a TfRecord file
+    '''
+    session = Session.object_session(repository)
+    print('Getting commits')
+    commits = get_commits(repository, synthetic=True)
+    print('Got {} of them'.format(len(commits)))
+
+    for commit in commits:
+        print('Doing commit: {} with {} failed tests'.format(
+            commit, len(commit.failed_test_results)))
+
+        for failed_result in commit.failed_test_results:
+            test_failure_to_feature(failed_result)
+            test_failure_to_label(failed_result)
+
+        session.commit()
+
+
 def commit_generator(repository_id: int, batch_size: int, no_noise_epochs=200):
     '''
     Returns augmented commit data for training
@@ -83,37 +111,31 @@ def commit_generator(repository_id: int, batch_size: int, no_noise_epochs=200):
     with session_manager() as session:
         repository = get(session, Repository, id=repository_id)
         while True:
+            if epoch_num > no_noise_epochs:
+                add_noise = True
+
+            failed_test_results = get_all(
+                session,
+                TestResult,
+                limit=1000,
+                random=True,
+                repository_id=repository.id,
+                status=TEST_OUTPUT_FAILURE)
+
             features = []
             labels = []
+            for failed_result in failed_test_results:
+                features.append(
+                    test_failure_to_feature(failed_result, add_noise=add_noise))
 
-            while len(features) < 1000:
-                # commit = get(session, Commit, id=1809)
-                commit = get_commits(
-                    repository, num_commits=batch_size, synthetic=True)[0]
+                labels.append(test_failure_to_label(failed_result))
 
-                if not commit.failed_test_results:
-                    continue
-
-                print(commit)
-
-                add_noise = False
-                # We should only start adding noise after 500 epochs
-                if epoch_num > no_noise_epochs:
-                    add_noise = True
-
-                features.extend(commit_to_features(commit, add_noise=add_noise))
-                labels.extend(commit_to_labels(commit))
-
-            print('Yielding batch size of {}'.format(batch_size))
             epoch_num += 1
 
             yield numpy.stack(features), numpy.stack(labels)
 
 
-def tensor_feeder(filename,
-                  perform_shuffle=False,
-                  repeat_count=1,
-                  batch_size=1):
+def tensor_feeder(filename, perform_shuffle=False, repeat_count=1, batch_size=1):
     '''
     Feeds TfRecords data into the Estimator
 
@@ -157,7 +179,7 @@ def train(repository: Repository):
     # bringing this into the method because keras takes so long to load
     model = get_attempt_2_model()
 
-    train_model_keras(repository, model, 2)
+    train_model_keras(repository, model, attempt_id=3)
 
 
 def train_model_keras(repository, model, attempt_id):
@@ -169,12 +191,12 @@ def train_model_keras(repository, model, attempt_id):
 
     generator = commit_generator(repository.id, batch_size)
 
-    model.save(get_output_dir(BLAME_PREDICTION_MODEL.format(
+    model.save(get_output_dir(BLAME_PREDICTION_MODEL_FILE.format(
         attempt_id=attempt_id)))
 
     checkpoint_weights_filename = get_output_dir(
         'predict_blame_{attempt_id}'.format(attempt_id=attempt_id) +
-        '{epoch}.h5f')
+        '_{epoch}.h5f')
 
     callbacks = [
         ModelCheckpoint(checkpoint_weights_filename, period=10),
@@ -188,7 +210,7 @@ def train_model_keras(repository, model, attempt_id):
         steps_per_epoch=1,
         verbose=1)
 
-    model.save(get_output_dir(BLAME_PREDICTION_MODEL.format(
+    model.save(get_output_dir(BLAME_PREDICTION_MODEL_FILE.format(
         attempt_id=attempt_id)))
 
 
@@ -216,53 +238,20 @@ def train_model_as_estimator(model):
     estimator.train(input_fn=tensor_feeder(TF_RECORD_FILE))
 
 
-# def get_attempt_1_model():
-#     '''
-#     Attempt had a flat 1D input made up of two conatenated vectors:
-#         - First part of the vector was the method data in relation to the test
-#           in question.
-#         - Second part of the vector was if the test:
-#             0 - didn't fail
-#             1 - failed
-#             2 - failed and this is the test in question
-
-#     Had an average accuracy of 0.159
-#     '''
-#     model = Sequential()
-#     model.add(Dense(1187, input_shape=(1187, )))
-#     model.add(Activation('relu'))
-#     model.add(Dense(674))
-#     model.add(Activation('relu'))
-#     model.add(Dense(337))
-#     model.add(Activation('sigmoid'))
-
-#     optimizer = AdamOptimizer()
-#     # Compile model
-#     model.compile(
-#         loss='categorical_crossentropy',
-#         optimizer=optimizer,
-#         metrics=['accuracy'])
-
-#     print(model.summary())
-#     return model
-
-
-def get_attempt_2_model():
+def get_attempt_1_model():
     '''
     Attempt had a flat 1D input made up of two conatenated vectors:
         - First part of the vector was the method data in relation to the test
           in question.
-            - function was altered: 0 or 1
-            - number of times the function has been synthetically blamed: int
+        - Second part of the vector was if the test:
+            0 - didn't fail
+            1 - failed
+            2 - failed and this is the test in question
 
-        - Second part of the vector was for each test it had two components:
-            - did fail: 0 or 1
-            - is test in question: 0 or 1
-
-    Had an average accuracy of ...
+    Had an average accuracy of 15.9%
     '''
     model = Sequential()
-    model.add(Dense(1700, input_shape=(1700, )))
+    model.add(Dense(1187, input_shape=(1187, )))
     model.add(Activation('relu'))
     model.add(Dense(674))
     model.add(Activation('relu'))
@@ -280,6 +269,43 @@ def get_attempt_2_model():
     return model
 
 
+def get_attempt_2_model():
+    '''
+    Attempt had a flat 1D input made up of two conatenated vectors:
+        - First part of the vector was the method data in relation to the test
+          in question.
+            - function was altered: 0 or 1
+            - number of times the function has been synthetically blamed: int
+
+        - Second part of the vector was for each test it had two components:
+            - did fail: 0 or 1
+            - is test in question: 0 or 1
+
+    Had an average accuracy of 15.33%
+    But I am seeing some highs like 85.92%
+    '''
+    model = Sequential()
+    model.add(Dense(1700, input_shape=(1700, )))
+    model.add(Activation('relu'))
+    model.add(Dense(674))
+    model.add(Activation('relu'))
+    model.add(Dense(337))
+    model.add(Activation('sigmoid'))
+
+    optimizer = AdamOptimizer()
+    # Compile model
+    model.compile(
+        loss='categorical_crossentropy',
+        optimizer=optimizer,
+        metrics=['accuracy'])
+
+    print(model.summary())
+
+    logger.info('loading weights')
+    model.load_weights(get_output_dir('predict_blame_22540.h5f'))
+    return model
+
+
 def predict_blames(commit: Commit):
     '''
     Predicts the functions to blame for each test failure in the commit's
@@ -289,25 +315,34 @@ def predict_blames(commit: Commit):
             in commit.failed_test_results]
 
 
+def get_model():
+    '''
+    Returns the prediction model
+    '''
+    global BLAME_PREDICTION_MODEL
+
+    if not BLAME_PREDICTION_MODEL:
+        BLAME_PREDICTION_MODEL = load_model(get_output_dir(
+            BLAME_PREDICTION_MODEL_FILE.format(attempt_id=3)))
+        BLAME_PREDICTION_MODEL.load_weights(
+            get_output_dir('predict_blame_3_1680.h5f'))
+
+    return BLAME_PREDICTION_MODEL
+
+
 def predict_blame(test_failure: TestResult):
     '''
     Predicts using the model
     '''
-    from keras.models import load_model
-    model = load_model(get_output_dir(BLAME_PREDICTION_MODEL.format(
-        attempt_id=2)))
+    model = get_model()
+
     feature = test_failure_to_feature(test_failure)
     prediction_vector = model.predict(numpy.array([feature, ]))
     test_failure.blamed_function_prediction_vector = (
         numpy.around(prediction_vector, decimals=3).tolist()[0])
     test_failure.summary()
     print('\n')
-    # for blame in test_failure.blames:
-    #     if blame.diff.function == test_failure.blamed_function_prediction[0][0]:
-    #         print('GOT IT RIGHT\n')
-    #     else:
-    #         import pdb; pdb.set_trace()
-    #         print('got it wrong..\n')
+
     return prediction_vector
 
 
@@ -315,9 +350,8 @@ def validate(repository):
     '''
     Validates a model against a repository
     '''
-    from keras.models import load_model
-    model = load_model(get_output_dir(BLAME_PREDICTION_MODEL.format(
-        attempt_id=2)))
+    model = load_model(get_output_dir(BLAME_PREDICTION_MODEL_FILE.format(
+        attempt_id=3)))
     commits, validation_features, validation_labels = get_validation_data(repository)
     scores = model.evaluate(validation_features, validation_labels)
     print("\n%s: %.2f%%" % (model.metrics_names[1], scores[1] * 100))
@@ -384,7 +418,9 @@ def commit_to_labels(commit: Commit):
     return labels
 
 
-def test_failure_to_feature(test_failure: TestResult, add_noise=False):
+def test_failure_to_feature(test_failure: TestResult,
+                            add_noise=False,
+                            use_cache=True):
     '''
     Convert a test failure into a feature.  This contains all the features
     for each method in relation to the test
@@ -399,6 +435,25 @@ def test_failure_to_feature(test_failure: TestResult, add_noise=False):
             - did fail: 0 or 1
             - is test in question: 0 or 1
     '''
+    if use_cache and test_failure.cached_function_blame_feature is not None:
+        blame_features = test_failure.cached_function_blame_feature
+        if add_noise:
+            blame_features = add_test_failure_noise(
+                test_failure, blame_features)
+
+        return blame_features
+
+    logger.info('Not using cache for feature')
+
+    # get the previous commits of the synthetic commit
+    previous_commits = get_synthetic_children_commits(
+        test_failure.test_run.commit)
+    commit = test_failure.test_run.commit
+
+    # add the current commit to the list of commits to look at in seeing if
+    # a function was altered since the test was passing
+    previous_commits.append(commit)
+
     test_result_vector = numpy.array([])
 
     for test_result in test_failure.test_run.test_results_ordered:
@@ -421,29 +476,38 @@ def test_failure_to_feature(test_failure: TestResult, add_noise=False):
     function_feature_vector = numpy.array([])
     blame_count_dict = get_blame_counts_for_tests(test_failure.test)
     for function in functions:
-        function_was_altered = any(
-            [diff.commit.id == test_failure.test_run.commit.id
-             for diff in function.diffs])
+        # whether or not the function was altered in the commit
+        was_altered = int(any(
+            [diff.commit.id == commit.id for diff in function.diffs]))
+
         blame_count = blame_count_dict.get(function.id, 0)
 
         function_feature_vector = numpy.append(
             function_feature_vector,
-            numpy.array([function_was_altered, blame_count]))
+            numpy.array([was_altered, blame_count]))
 
     if add_noise:
-        num_methods_altered = random.randint(0, 10)
-        for i in range(num_methods_altered):
-            method_to_alter = random.randint(0, len(functions) - 1)
-            function_feature_vector[method_to_alter * 2] = 1.0
+        function_feature_vector = add_test_failure_noise(
+            test_failure, function_feature_vector)
 
-    return numpy.concatenate((function_feature_vector, test_result_vector))
+    logger.info('Caching the feature')
+    feature_vector = numpy.concatenate(
+        (function_feature_vector, test_result_vector))
+    test_failure._cached_function_blame_feature = feature_vector
+
+    return feature_vector
 
 
-def test_failure_to_label(test_failure: TestResult):
+def test_failure_to_label(test_failure: TestResult, use_cache=True):
     '''
     Convert a test failure into a label.  A function has a 1 if it is blamed
     for the test failure
     '''
+    if use_cache and test_failure.cached_function_blame_label is not None:
+        return test_failure.cached_function_blame_label
+
+    logger.info('Not using cache for label')
+
     functions = test_failure.test_run.commit.functions
     label = numpy.array([])
     blamed_functions = [blame.function for blame in test_failure.blames]
@@ -453,7 +517,23 @@ def test_failure_to_label(test_failure: TestResult):
         else:
             label = numpy.append(label, 0.0)
 
+    test_failure._cached_function_blame_label = label
+    logger.info('Caching the label')
     return label
+
+
+def add_test_failure_noise(test_failure, input_vector):
+    '''
+    Adds noise to the test failure input vector
+    '''
+    functions = test_failure.test_run.commit.functions
+
+    num_methods_altered = random.randint(0, 10)
+    for i in range(num_methods_altered):
+        method_to_alter = random.randint(0, len(functions) - 1)
+        input_vector[method_to_alter * 2] = 1.0
+
+    return input_vector
 
 
 def commit_to_blame_matrix_labels(commit: Commit):
@@ -496,3 +576,51 @@ def commit_to_blame_matrix_labels(commit: Commit):
     return numpy.split(label, label.size)
 
 
+def function_changed_since_test_passed(test_failure_result: TestResult,
+                                       function: Function,
+                                       previous_commits: CommitList=[]) -> bool:
+    '''
+    Return True if the function was altered since the failing test was passing.
+    This counts the current and commit and all commits since he last known
+    commit where the test was passing.
+
+    @param commit: the current commit
+    @param function: the function that we want to know if it was altered
+    @param test: the test that is failing
+    @param previous_commits: if previous commits is not specified, then it will
+                             keep retrieving commits from the database and a
+                             test result for a commit is passing or not.
+    @return: bool
+    '''
+    if previous_commits:
+        # make sure the latest commit is first to be tested against
+        previous_commits.sort(key=lambda c: c.id, reverse=True)
+
+        for commit in previous_commits:
+            # see if the test is passing in this commit
+            commit_test_result = [
+                test_failure_result.test.id == test_result.test.id for
+                test_result in commit.latest_test_run.test_results][0]
+
+            # if the test is passing for this commit, then we know the function
+            # was not altered after it was passing.
+            if commit_test_result.passed:
+                return False
+
+            # check if the function was altered in this commit
+            function_altered_in_commit = any(
+                [diff.commit.id == commit.id for diff in function.diffs])
+
+            # if the function was altered and the test is not passing yet when
+            # looking at previous commits, then return True
+            if function_altered_in_commit and commit_test_result.failed:
+                return True
+
+        # If we are here, then the test was not altered and the test was failing
+        # the whole time?  This shouldn't happen with synthetic commits where
+        # the children commits all start from a clean base
+        import pdb; pdb.set_trace()
+        return False
+
+    else:
+        raise NotImplementedError()

@@ -2,28 +2,19 @@
 Assigns blame for test failures to a commit
 '''
 import itertools
-from junitparser import JUnitXml
 
-from bug_buddy.constants import (ERROR_STATEMENT,
-                                 TEST_OUTPUT_FAILURE,
-                                 SYNTHETIC_FIXING_CHANGE)
+from bug_buddy.constants import TEST_OUTPUT_FAILURE
+from bug_buddy.errors import BugBuddyError
 from bug_buddy.db import (
     Session,
-    get,
-    get_or_create,
     create,
-    session_manager,
     get_all)
-from bug_buddy.git_utils import create_commit
 from bug_buddy.logger import logger
 from bug_buddy.schema import (
+    Commit,
     Repository,
     Blame,
-    Diff,
-    TestResult,
-    TestRun,
-    Commit)
-from bug_buddy.schema.aliases import DiffList
+    TestRun)
 
 
 def synthetic_blame_all_commits(repository: Repository):
@@ -57,6 +48,67 @@ def synthetic_blame(commit: Commit,
 
     # Get the list of commits that are made up of the subset of diffs in this
     # commit
+    children_commits = get_synthetic_children_commits(commit)
+
+    for failed_test_result in test_run.failed_tests:
+        # get all the blames for this test failure that were new at the time.
+        # The newness attribute should remove duplicates.
+        # All of these blames will now be combined for a new blame for this
+        # test failure.
+        children_test_failure_blames = []
+        for child_commit in children_commits:
+            if child_commit.has_same_test_result_output(
+                    failed_test_result,
+                    status=TEST_OUTPUT_FAILURE):
+                child_test_failure = (
+                    child_commit.get_matching_test_result(failed_test_result))
+
+                for blame in child_test_failure.blames:
+                    children_test_failure_blames.append(blame)
+
+        if children_test_failure_blames:
+            faulty_diffs = list(set(
+                [blame.diff for blame in children_test_failure_blames]))
+
+            for faulty_diff in faulty_diffs:
+                logger.info('Assigning blame using child commit {} and diff {} '
+                            'for test failure: {}'
+                            .format(child_commit,
+                                    faulty_diff,
+                                    failed_test_result))
+                create(session,
+                       Blame,
+                       diff=faulty_diff,
+                       test_result=failed_test_result)
+
+        else:
+            # We have created a completely new blame from this combination of
+            # diffs in comparison from its children
+            for diff in commit.diffs:
+                blame = create(
+                    session,
+                    Blame,
+                    diff=diff,
+                    test_result=failed_test_result)
+                logger.info('Assigning new blame for commit {} blame {}'
+                            'for test failure: {}'
+                            .format(commit, blame, failed_test_result))
+
+    logger.info('Completed blaming for {}'.format(commit))
+    session.commit()
+
+
+def get_synthetic_children_commits(commit: Commit):
+    '''
+    Get all children commits for a synthetic commit
+    '''
+    if not commit.is_synthetic:
+        msg = ('Tried to get children commits for the non-synthetic commit: {}'
+               .format(commit))
+        raise BugBuddyError(msg)
+
+    session = Session.object_session(commit)
+
     children_commits = []
     for diff_set in powerset(commit.diffs):
         # an empty set in the powerset is ignored
@@ -76,50 +128,7 @@ def synthetic_blame(commit: Commit,
             .filter(Commit.synthetic_diff_hash == diff_hash).one())
         children_commits.append(child_commit)
 
-    for test_failure in test_run.failed_tests:
-        # get all the blames for this test failure that were new at the time.
-        # The newness attribute should remove duplicates.
-        # All of these blames will now be combined for a new blame for this
-        # test failure.
-        children_test_failure_blames = []
-        for child_commit in children_commits:
-            if child_commit.has_same_test_result_output(
-                    test_failure,
-                    status=TEST_OUTPUT_FAILURE):
-                child_test_failure = (
-                    child_commit.get_matching_test_result(test_failure))
-
-                for blame in child_test_failure.blames:
-                    children_test_failure_blames.append(blame)
-
-        if children_test_failure_blames:
-            faulty_diffs = list(set(
-                [blame.diff for blame in children_test_failure_blames]))
-
-            for faulty_diff in faulty_diffs:
-                # logger.info('Assigning blame using child commit {} blame {} '
-                #             'for test failure: {}'
-                #             .format(child_commit, faulty_diff, test_failure))
-                create(session,
-                       Blame,
-                       diff=faulty_diff,
-                       test_result=test_failure)
-
-        else:
-            # We have created a completely new blame from this combination of
-            # diffs in comparison from its child
-
-            for diff in commit.diffs:
-                blame = create(
-                    session,
-                    Blame,
-                    diff=diff,
-                    test_result=test_failure)
-                logger.info('Assigning new blame for commit {} blame {}'
-                            'for test failure: {}'
-                            .format(commit, blame, test_failure))
-
-    logger.info('Completed blaming for {}'.format(commit))
+    return children_commits
 
 
 def get_hash_given_base_synthetic_ids(base_synthetic_ids):
@@ -143,4 +152,3 @@ def powerset(diffs):
     return (itertools.chain.from_iterable(
         itertools.combinations(diffs, index) for index in range(len(diffs) + 1)
     ))
-

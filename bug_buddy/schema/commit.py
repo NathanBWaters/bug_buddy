@@ -181,6 +181,13 @@ class Commit(Base):
         )
 
     @property
+    def is_synthetic(self):
+        '''
+        Returns a boolean whether or not the commit is synthetic
+        '''
+        return self.commit_type == SYNTHETIC_CHANGE
+
+    @property
     def blames(self):
         '''
         Returns the diffs in the commit
@@ -246,6 +253,14 @@ class Commit(Base):
                 test_failures.append(test_result.test)
 
         return test_failures
+
+    @property
+    def num_test_failures(self):
+        '''
+        Returns a list of tests that failed in the latest test run for the
+        commit
+        '''
+        return len(self.test_failures)
 
     @property
     def failed_test_results(self):
@@ -321,13 +336,45 @@ class Commit(Base):
 
         return matching_test_result.status == test_result.status
 
-    def summary(self, indent=0):
+    def summary(self, indent=0, test_results=True, edits=True):
         '''
         Prints a summary to terminal about this commit
         '''
         print(' ' * indent + str(self))
         print(' ' * indent + 'Number of test runs: {}'.format(len(self.test_runs)))
-        self.latest_test_run.summary(indent=indent + 2)
+
+        if edits:
+            print('\n')
+            for diff in self.diffs:
+                print(' ' * (indent + 2) + str(diff))
+            print('\n')
+
+        if test_results:
+            print('\n')
+            self.latest_test_run.summary(indent=indent + 2)
+            print('\n')
+
+    def blame_summary(self, indent=0):
+        '''
+        Prints a summary to terminal about this commit
+        '''
+        print(' ' * indent + str(self))
+        print(' ' * indent + 'Number of edits: {}'.format(len(self.diffs)))
+        print(' ' * indent + 'Number of test failures: {}'
+              .format(self.num_test_failures))
+
+        function_to_test_map = {}
+        for diff in self.diffs:
+            function_to_test_map[diff.function] = []
+
+        for test_failure_result in self.latest_test_run.test_failures:
+            for blame in test_failure_result.blames:
+                function_to_test_map[blame.function].append(test_failure_result.test)
+
+        for function, failed_tests in function_to_test_map.items():
+            print(' ' * (indent + 2) + str(function))
+            for failed_test in failed_tests:
+                print(' ' * (indent + 4) + str(failed_test))
 
     def __repr__(self):
         '''

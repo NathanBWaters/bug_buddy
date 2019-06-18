@@ -51,7 +51,8 @@ class Test(Base):
         '''
         Converts the repository into a string
         '''
-        return ('<Test {name} | {file} | {classname} />'
-                .format(name=self.name,
+        return ('<Test {id} | {name} | {file} | {classname} />'
+                .format(id=self.id,
+                        name=self.name,
                         file=self.file,
                         classname=self.classname))

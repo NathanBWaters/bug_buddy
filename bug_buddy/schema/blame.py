@@ -2,10 +2,8 @@
 '''
 Object representation a Blame.
 '''
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import relationship
-from typing import List
 
 from bug_buddy.schema.base import Base
 from bug_buddy.schema.test_result import TestResult
@@ -36,6 +34,9 @@ class Blame(Base):
     test_id = Column(Integer, ForeignKey('test.id'))
     test = relationship('Test')
 
+    # A function can only be blamed for an individual test result once
+    UniqueConstraint('test_result_id', 'function_id', name='unique_blame')
+
     def __init__(self,
                  diff: Diff,
                  test_result: TestResult):
@@ -51,6 +52,7 @@ class Blame(Base):
         '''
         Converts the Blame into a string
         '''
-        return ('<Blame {test} | {function} />'
-                .format(function=self.diff.function,
+        return ('<Blame {id} | {test} | {function} />'
+                .format(id=self.id,
+                        function=self.diff.function,
                         test=self.test_result.test))

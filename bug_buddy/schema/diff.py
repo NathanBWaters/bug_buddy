@@ -4,12 +4,9 @@ Object representation a Diff.  Pretty simple, only works with additions
 currently
 '''
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-from typing import List
 
 from bug_buddy.schema.base import Base
-from bug_buddy.schema.repository import Repository
 
 
 class Diff(Base):
@@ -85,7 +82,12 @@ class Diff(Base):
         '''
         Converts the Diff into a string
         '''
-        return ('<Diff {file_path} | {first_line}-{last_line} />'
-                .format(file_path=self.file_path,
+        function_info = (
+            '| function: {} '.format(self.function.name) if self.function
+            else '')
+        return ('<Diff {id} | {file_path}::{first_line}-{last_line} {function_info}/>'
+                .format(id=self.id,
+                        file_path=self.file_path,
                         first_line=self.first_line,
-                        last_line=self.last_line))
+                        last_line=self.last_line,
+                        function_info=function_info))
