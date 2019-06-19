@@ -42,8 +42,10 @@ def get_output_dir(file_name: str=None):
     '''
     Returns the path to the output directory
     '''
-    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                              'models')
+    output_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.realpath(__file__)))),
+        'model_output')
     if file_name:
         output_dir = os.path.join(output_dir, file_name)
 

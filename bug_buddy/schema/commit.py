@@ -2,6 +2,7 @@
 '''
 The Commit model.  A record of a particular change in a repository's code
 '''
+from collections import defaultdict
 import numpy
 from sqlalchemy import Column, ForeignKey, Integer, String, Binary
 from sqlalchemy.orm import relationship, deferred
@@ -207,6 +208,13 @@ class Commit(Base):
         return self.test_runs[-1]
 
     @property
+    def earliest_test_run(self):
+        '''
+        Returns the most recent test run
+        '''
+        return self.test_runs[0]
+
+    @property
     def commit_tensor(self):
         '''
         Returns the commit in tensor form as a numpy array
@@ -336,7 +344,7 @@ class Commit(Base):
 
         return matching_test_result.status == test_result.status
 
-    def summary(self, indent=0, test_results=True, edits=True):
+    def summary(self, indent=0, blame=True, prediction=True, edits=True):
         '''
         Prints a summary to terminal about this commit
         '''
@@ -344,30 +352,27 @@ class Commit(Base):
         print(' ' * indent + 'Number of test runs: {}'.format(len(self.test_runs)))
 
         if edits:
-            print('\n')
+            print('-' * 10 + ' E D I T S ' + '-' * 10)
             for diff in self.diffs:
                 print(' ' * (indent + 2) + str(diff))
             print('\n')
 
-        if test_results:
-            print('\n')
-            self.latest_test_run.summary(indent=indent + 2)
-            print('\n')
+        if blame:
+            self.blame_summary()
+
+        if prediction:
+            self.prediction_summary()
 
     def blame_summary(self, indent=0):
         '''
-        Prints a summary to terminal about this commit
+        Prints a summary to terminal about the actual blames of the commit
         '''
-        print(' ' * indent + str(self))
-        print(' ' * indent + 'Number of edits: {}'.format(len(self.diffs)))
-        print(' ' * indent + 'Number of test failures: {}'
-              .format(self.num_test_failures))
-
+        print('-' * 10 + ' A C T U A L ' + '-' * 10)
         function_to_test_map = {}
         for diff in self.diffs:
             function_to_test_map[diff.function] = []
 
-        for test_failure_result in self.latest_test_run.test_failures:
+        for test_failure_result in self.earliest_test_run.test_failures:
             for blame in test_failure_result.blames:
                 function_to_test_map[blame.function].append(test_failure_result.test)
 
@@ -375,6 +380,31 @@ class Commit(Base):
             print(' ' * (indent + 2) + str(function))
             for failed_test in failed_tests:
                 print(' ' * (indent + 4) + str(failed_test))
+        print('\n')
+
+    def prediction_summary(self, indent=0):
+        '''
+        Prints a summary to terminal about the predicted blames of the commit
+        '''
+        print('-' * 10 + ' P R E D I C T I O N ' + '-' * 10)
+        function_to_test_map = defaultdict(list)
+
+        for test_failure_result in self.latest_test_run.test_failures:
+            prediction = test_failure_result.predicted_blamed_functions
+            for (blamed_function, confidence) in prediction:
+                function_to_test_map[blamed_function].append({
+                    'test': test_failure_result.test,
+                    'confidence': confidence,
+                })
+
+        for function, failed_test_data_list in function_to_test_map.items():
+            print(' ' * (indent + 2) + str(function))
+            for failed_test_data in failed_test_data_list:
+                failed_test = failed_test_data['test']
+                confidence = failed_test_data['confidence']
+                print(' ' * (indent + 4) + str(failed_test) +
+                      ' | {}'.format(confidence))
+        print('\n')
 
     def __repr__(self):
         '''

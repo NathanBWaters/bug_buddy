@@ -58,7 +58,10 @@ class TestResult(Base):
     _cached_function_blame_feature_numpy = None
     _cached_function_blame_label_numpy = None
 
-    blamed_function_prediction_vector = None
+    # this is the output of the prediction network
+    _blamed_function_prediction = deferred(
+        Column('blamed_function_prediction', Binary, nullable=True))
+    _blamed_function_prediction_numpy = None
 
     @property
     def failed(self):
@@ -87,16 +90,43 @@ class TestResult(Base):
     @property
     def blamed_function_prediction(self):
         '''
+        Returns the test run feature as a 1D numpy array
+        '''
+        if self._blamed_function_prediction_numpy is None:
+            if type(self._blamed_function_prediction) is numpy.ndarray:
+                self._blamed_function_prediction_numpy = (
+                    self._blamed_function_prediction)
+            elif self._blamed_function_prediction is not None:
+                self._blamed_function_prediction_numpy = numpy.fromstring(
+                    self._blamed_function_prediction)
+            else:
+                return None
+
+        return numpy.ravel(self._blamed_function_prediction_numpy)
+
+    @property
+    def blamed_function_prediction_dict(self):
+        '''
         Returns test result prediction data
         '''
-        if self.blamed_function_prediction_vector is None:
+        if self.blamed_function_prediction is None:
             msg = 'Requested prediction data but it does not exist'
             raise BugBuddyError(msg)
 
-        prediction_dict = dict(zip(self.test_run.commit.functions,
-                                   self.blamed_function_prediction_vector))
+        return dict(zip(self.test_run.commit.functions,
+                        self.blamed_function_prediction))
 
-        return sorted(prediction_dict.items(), key=lambda x: x[1], reverse=True)[: 5]
+    @property
+    def predicted_blamed_functions(self):
+        '''
+        Return a dict with the predicted functions to blame for the test
+        failure.  The key is the function and the value is the percent
+        confidence
+        '''
+        return sorted(
+            self.blamed_function_prediction_dict.items(),
+            key=lambda x: x[1],
+            reverse=True)[:1]
 
     @property
     def cached_function_blame_feature(self):
@@ -104,7 +134,7 @@ class TestResult(Base):
         Returns the test run feature as a 1D numpy array
         '''
         if self._cached_function_blame_feature_numpy is None:
-            if self._cached_function_blame_feature:
+            if self._cached_function_blame_feature is not None:
                 self._cached_function_blame_feature_numpy = numpy.fromstring(
                     self._cached_function_blame_feature)
             else:
@@ -118,7 +148,7 @@ class TestResult(Base):
         Returns the test run label as a 1D numpy array
         '''
         if self._cached_function_blame_label_numpy is None:
-            if self._cached_function_blame_label:
+            if self._cached_function_blame_label is not None:
                 self._cached_function_blame_label_numpy = numpy.fromstring(
                     self._cached_function_blame_label)
             else:
@@ -134,7 +164,7 @@ class TestResult(Base):
         for blame in self.blames:
             print((' ' * (indent + 2)) + str(blame))
 
-    def get_blamed_function(self, indent=0):
+    def blame_summary(self, indent=0):
         '''
         Prints a summary to terminal about this test run
         '''

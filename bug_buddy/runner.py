@@ -51,7 +51,6 @@ def run_all_tests(commit: Commit):
     Runs a repository's tests and records the results
     '''
     logger.info('Running the tests against commit: {}'.format(commit))
-    test_run = None
 
     start_timestamp = time.time()
     date = datetime.utcfromtimestamp(start_timestamp).strftime('%Y-%m-%d %H:%M:%S')
@@ -69,7 +68,8 @@ def run_all_tests(commit: Commit):
         start_timestamp=start_timestamp)
 
     # run all of the tests
-    _run_tests(test_run, commit.repository.test_commands)
+    test_command = commit.repository.test_commands
+    _run_tests(test_run, test_command)
 
     return test_run
 
@@ -78,10 +78,6 @@ def _run_tests(test_run: TestRun, test_command: str):
     '''
     Runs a specific command and reads the output from the results file
     '''
-    logger.info('Called runner::_run_tests with {test_run} and command "{cmd}"'
-                .format(test_run=test_run, cmd=test_command))
-    test_run = None
-
     try:
         temp_output = tempfile.NamedTemporaryFile(
             prefix="bugbuddy_test_output_",

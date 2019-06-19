@@ -72,10 +72,6 @@ class ChangeWatchdog(PatternMatchingEventHandler):
                                     s=total_time % 60))
                 session.commit()
 
-                # run the tests in a smart order
-                self.brain.set_commit(commit)
-                self.brain.act()
-
                 # display the results in the cli output
                 # self.score_card.render(commit)
 
@@ -91,15 +87,15 @@ def watch(repository: Repository, commit_only: bool):
     session = Session.object_session(repository)
     set_bug_buddy_branch(repository)
     logger.info('Starting BugBuddy thingy')
-
     commit = get(session, Commit, id=1809)
+
     go_to_commit(repository, commit, force=True)
 
-    logger.info('Running tests')
     run_all_tests(commit)
 
     for test_failure in commit.failed_test_results:
         predict_blame(test_failure)
+    import pdb; pdb.set_trace()
 
     commit.summary()
 

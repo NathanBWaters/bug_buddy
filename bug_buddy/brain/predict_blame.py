@@ -13,7 +13,11 @@ tensorflow.enable_eager_execution()
 from tensorflow.train import AdamOptimizer
 from tensorflow.python.keras.models import Sequential, load_model
 from tensorflow.python.keras.callbacks import ModelCheckpoint
-from tensorflow.python.keras.layers import Dense, Activation
+from tensorflow.python.keras.layers import (
+    Dense,
+    Activation,
+    BatchNormalization,
+    Dropout)
 
 
 from bug_buddy.brain.utils import (
@@ -39,67 +43,26 @@ from bug_buddy.schema import (
 
 
 numpy.set_printoptions(suppress=True, precision=4, threshold=sys.maxsize)
-BLAME_PREDICTION_MODEL_FILE = 'predict_blame_{attempt_id}.h5'
-BLAME_PREDICTION_MODEL = None
 
-test_result_prediction_model = None
+EXPERIMENT_ID = 4
+BLAME_PREDICTION_MODEL_FILE = 'predict_blame_{experiment_id}.h5'.format(
+    experiment_id=EXPERIMENT_ID)
+
+# global variable so we only have to import the model once
+BLAME_PREDICTION_MODEL = None
 
 # A TfRecord file that stores the vectors.  Used for quick ingestion during
 # training and caches the computed output of each test failure.
 TF_RECORD_FILE = get_output_dir('exp_2_predict_blame.tfrecords')
 
 
-def to_tf_float(value):
+def predict_blames(commit: Commit):
     '''
-    Utility function for wrapping a value as a int 64 for Tensorflow
+    Predicts the functions to blame for each test failure in the commit's
+    latest test run
     '''
-    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
-
-
-def write_records(repository: Repository):
-    '''
-    Writes the training data to a TfRecord file
-    '''
-    writer = tf.python_io.TFRecordWriter(TF_RECORD_FILE)
-    print('Getting commits')
-    commits = get_commits(repository, synthetic=True)
-    print('Got {} of em'.format(len(commits)))
-
-    for commit in commits:
-        print('Doing commit: {}'.format(commit))
-        for failed_result in commit.failed_test_results:
-            feature = test_failure_to_feature(failed_result)
-            label = test_failure_to_label(failed_result)
-
-            feature = {'feature': to_tf_float(feature),
-                       'label': to_tf_float(label)}
-
-            # Serialize to string and write to file
-            example = tf.train.Example(
-                features=tf.train.Features(feature=feature))
-            writer.write(example.SerializeToString())
-
-    writer.close()
-
-
-def cache_test_results(repository: Repository):
-    '''
-    Writes the training data to a TfRecord file
-    '''
-    session = Session.object_session(repository)
-    print('Getting commits')
-    commits = get_commits(repository, synthetic=True)
-    print('Got {} of them'.format(len(commits)))
-
-    for commit in commits:
-        print('Doing commit: {} with {} failed tests'.format(
-            commit, len(commit.failed_test_results)))
-
-        for failed_result in commit.failed_test_results:
-            test_failure_to_feature(failed_result)
-            test_failure_to_label(failed_result)
-
-        session.commit()
+    return [predict_blame(test_failure) for test_failure
+            in commit.failed_test_results]
 
 
 def commit_generator(repository_id: int, batch_size: int, no_noise_epochs=200):
@@ -135,54 +98,17 @@ def commit_generator(repository_id: int, batch_size: int, no_noise_epochs=200):
             yield numpy.stack(features), numpy.stack(labels)
 
 
-def tensor_feeder(filename, perform_shuffle=False, repeat_count=1, batch_size=1):
-    '''
-    Feeds TfRecords data into the Estimator
-
-    @returns: a two-element tuple organized as follows:
-    - The first element must be a dictionary in which each input feature is a
-      key. We have only one 'dense_1' here which is the input layer name for
-      the model.
-    - The second element is a list of labels for the training batch.
-    '''
-    def parse(serialized):
-        '''
-        Parses the TFRecords and returns them as tf Tensors
-        '''
-        feature = {
-            'feature': tf.FixedLenFeature([], tf.float32),
-            'label': tf.FixedLenFeature([], tf.float32)
-        }
-        example = tf.parse_single_example(serialized, feature)
-
-        return (dict({'dense_1': example['feature']}), example['label'])
-
-    dataset = tf.data.TFRecordDataset(filenames=filename)
-    # Parse the serialized data in the TFRecords files.
-    # This returns TensorFlow tensors for the image and labels.
-    dataset = dataset.map(parse)
-
-    if perform_shuffle:
-        # Randomizes input using a window of 256 elements (read into memory)
-        dataset = dataset.shuffle(buffer_size=256)
-
-    dataset = dataset.repeat(repeat_count)  # Repeats dataset this # times
-    dataset = dataset.batch(batch_size)  # Batch size to use
-    iterator = dataset.make_one_shot_iterator()
-    return iterator.get_next()
-
-
 def train(repository: Repository):
     '''
     Creates and trains a neural network.  It then exports a model.
     '''
     # bringing this into the method because keras takes so long to load
-    model = get_attempt_2_model()
+    model = get_model_schema()
 
-    train_model_keras(repository, model, attempt_id=3)
+    train_model_keras(repository, model)
 
 
-def train_model_keras(repository, model, attempt_id):
+def train_model_keras(repository, model):
     '''
     Convert our keras model into a Tensorflow Estimator so that we can easily
     import TfRecords
@@ -191,11 +117,8 @@ def train_model_keras(repository, model, attempt_id):
 
     generator = commit_generator(repository.id, batch_size)
 
-    model.save(get_output_dir(BLAME_PREDICTION_MODEL_FILE.format(
-        attempt_id=attempt_id)))
-
     checkpoint_weights_filename = get_output_dir(
-        'predict_blame_{attempt_id}'.format(attempt_id=attempt_id) +
+        'predict_blame_{experiment_id}'.format(experiment_id=EXPERIMENT_ID) +
         '_{epoch}.h5f')
 
     callbacks = [
@@ -205,71 +128,15 @@ def train_model_keras(repository, model, attempt_id):
     # Fit the model
     model.fit_generator(
         generator,
-        epochs=4000,
+        epochs=800,
         callbacks=callbacks,
         steps_per_epoch=1,
         verbose=1)
 
-    model.save(get_output_dir(BLAME_PREDICTION_MODEL_FILE.format(
-        attempt_id=attempt_id)))
+    model.save(get_output_dir(BLAME_PREDICTION_MODEL_FILE))
 
 
-def train_model_as_estimator(model):
-    '''
-    Convert our keras model into a Tensorflow Estimator so that we can easily
-    import TfRecords
-    '''
-    estimator = tf.keras.estimator.model_to_estimator(
-        keras_model=model, model_dir=get_output_dir())
-
-    # train_spec = tf.estimator.TrainSpec(
-    #     input_fn=lambda: tensor_feeder(
-    #         TF_RECORD_FILE,
-    #         perform_shuffle=True,
-    #         repeat_count=5,
-    #         batch_size=20),
-    #     max_steps=500)
-    # eval_spec = tf.estimator.EvalSpec(
-    #     input_fn=lambda: tensor_feeder(
-    #         TF_RECORD_FILE,
-    #         perform_shuffle=False,
-    #         batch_size=1))
-
-    estimator.train(input_fn=tensor_feeder(TF_RECORD_FILE))
-
-
-def get_attempt_1_model():
-    '''
-    Attempt had a flat 1D input made up of two conatenated vectors:
-        - First part of the vector was the method data in relation to the test
-          in question.
-        - Second part of the vector was if the test:
-            0 - didn't fail
-            1 - failed
-            2 - failed and this is the test in question
-
-    Had an average accuracy of 15.9%
-    '''
-    model = Sequential()
-    model.add(Dense(1187, input_shape=(1187, )))
-    model.add(Activation('relu'))
-    model.add(Dense(674))
-    model.add(Activation('relu'))
-    model.add(Dense(337))
-    model.add(Activation('sigmoid'))
-
-    optimizer = AdamOptimizer()
-    # Compile model
-    model.compile(
-        loss='categorical_crossentropy',
-        optimizer=optimizer,
-        metrics=['accuracy'])
-
-    print(model.summary())
-    return model
-
-
-def get_attempt_2_model():
+def get_model_schema():
     '''
     Attempt had a flat 1D input made up of two conatenated vectors:
         - First part of the vector was the method data in relation to the test
@@ -281,51 +148,52 @@ def get_attempt_2_model():
             - did fail: 0 or 1
             - is test in question: 0 or 1
 
-    Had an average accuracy of 15.33%
-    But I am seeing some highs like 85.92%
+    Major updates:
+        - Using batch normalization
+        - Using dropout
+        - Using binary crossentropy instead of categorical cross entropy
     '''
     model = Sequential()
     model.add(Dense(1700, input_shape=(1700, )))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.1))
     model.add(Activation('relu'))
+
     model.add(Dense(674))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.1))
     model.add(Activation('relu'))
+
     model.add(Dense(337))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.1))
     model.add(Activation('sigmoid'))
 
     optimizer = AdamOptimizer()
+
     # Compile model
     model.compile(
-        loss='categorical_crossentropy',
+        loss='binary_crossentropy',
         optimizer=optimizer,
         metrics=['accuracy'])
 
     print(model.summary())
 
-    logger.info('loading weights')
-    model.load_weights(get_output_dir('predict_blame_22540.h5f'))
     return model
 
 
-def predict_blames(commit: Commit):
-    '''
-    Predicts the functions to blame for each test failure in the commit's
-    latest test run
-    '''
-    return [predict_blame(test_failure) for test_failure
-            in commit.failed_test_results]
-
-
-def get_model():
+def load_blame_model():
     '''
     Returns the prediction model
     '''
     global BLAME_PREDICTION_MODEL
 
     if not BLAME_PREDICTION_MODEL:
+        logger.info('Loading blame prediction model')
         BLAME_PREDICTION_MODEL = load_model(get_output_dir(
-            BLAME_PREDICTION_MODEL_FILE.format(attempt_id=3)))
-        BLAME_PREDICTION_MODEL.load_weights(
-            get_output_dir('predict_blame_3_1680.h5f'))
+            BLAME_PREDICTION_MODEL_FILE))
+        # BLAME_PREDICTION_MODEL.load_weights(
+        #     get_output_dir('predict_blame_3_1680.h5f'))
 
     return BLAME_PREDICTION_MODEL
 
@@ -334,88 +202,15 @@ def predict_blame(test_failure: TestResult):
     '''
     Predicts using the model
     '''
-    model = get_model()
+    model = load_blame_model()
 
     feature = test_failure_to_feature(test_failure)
     prediction_vector = model.predict(numpy.array([feature, ]))
-    test_failure.blamed_function_prediction_vector = (
-        numpy.around(prediction_vector, decimals=3).tolist()[0])
-    test_failure.summary()
-    print('\n')
+
+    # store the prediction
+    test_failure._blamed_function_prediction = prediction_vector[0]
 
     return prediction_vector
-
-
-def validate(repository):
-    '''
-    Validates a model against a repository
-    '''
-    model = load_model(get_output_dir(BLAME_PREDICTION_MODEL_FILE.format(
-        attempt_id=3)))
-    commits, validation_features, validation_labels = get_validation_data(repository)
-    scores = model.evaluate(validation_features, validation_labels)
-    print("\n%s: %.2f%%" % (model.metrics_names[1], scores[1] * 100))
-
-
-def get_validation_data(repository: Repository):
-    '''
-    Returns the repository's data to be ready for training
-    '''
-    commits = []
-    i = 0
-    logger.info('Retrieving training data')
-    for commit in repository.commits:
-        if i > 30:
-            logger.info('Got 30 commits')
-            break
-
-        if (commit.commit_type == SYNTHETIC_CHANGE and commit.test_runs):
-            commits.append(commit)
-            i += 1
-
-    random.shuffle(commits)
-
-    validation_features = []
-    validation_labels = []
-
-    for commit in commits:
-        feature = commit_to_state(commit)
-        set_functions_altered_noise(feature)
-        set_tests_not_run_noise(feature)
-
-        label = commit_to_blame_matrix_labels(commit)
-
-        validation_features.append(feature)
-        validation_labels.append(label)
-
-    return (commits,
-            numpy.stack(validation_features),
-            numpy.stack(validation_labels))
-
-
-def commit_to_features(commit: Commit, add_noise: bool=False):
-    '''
-    Converts a commit to a list of features and labels
-    '''
-    features = []
-
-    for test_failure in commit.failed_test_results:
-        features.append(
-            test_failure_to_feature(test_failure, add_noise=add_noise))
-
-    return features
-
-
-def commit_to_labels(commit: Commit):
-    '''
-    Converts a commit to a list of features and labels
-    '''
-    labels = []
-
-    for test_failure in commit.failed_test_results:
-        labels.append(test_failure_to_label(test_failure))
-
-    return labels
 
 
 def test_failure_to_feature(test_failure: TestResult,
@@ -442,8 +237,6 @@ def test_failure_to_feature(test_failure: TestResult,
                 test_failure, blame_features)
 
         return blame_features
-
-    logger.info('Not using cache for feature')
 
     # get the previous commits of the synthetic commit
     previous_commits = get_synthetic_children_commits(
@@ -490,7 +283,6 @@ def test_failure_to_feature(test_failure: TestResult,
         function_feature_vector = add_test_failure_noise(
             test_failure, function_feature_vector)
 
-    logger.info('Caching the feature')
     feature_vector = numpy.concatenate(
         (function_feature_vector, test_result_vector))
     test_failure._cached_function_blame_feature = feature_vector
@@ -506,8 +298,6 @@ def test_failure_to_label(test_failure: TestResult, use_cache=True):
     if use_cache and test_failure.cached_function_blame_label is not None:
         return test_failure.cached_function_blame_label
 
-    logger.info('Not using cache for label')
-
     functions = test_failure.test_run.commit.functions
     label = numpy.array([])
     blamed_functions = [blame.function for blame in test_failure.blames]
@@ -518,7 +308,6 @@ def test_failure_to_label(test_failure: TestResult, use_cache=True):
             label = numpy.append(label, 0.0)
 
     test_failure._cached_function_blame_label = label
-    logger.info('Caching the label')
     return label
 
 
@@ -624,3 +413,189 @@ def function_changed_since_test_passed(test_failure_result: TestResult,
 
     else:
         raise NotImplementedError()
+
+
+def validate(repository):
+    '''
+    Validates a model against a repository
+    '''
+    model = load_model(get_output_dir(BLAME_PREDICTION_MODEL_FILE))
+    commits, validation_features, validation_labels = get_validation_data(repository)
+    scores = model.evaluate(validation_features, validation_labels)
+    print("\n%s: %.2f%%" % (model.metrics_names[1], scores[1] * 100))
+
+
+def get_validation_data(repository: Repository):
+    '''
+    Returns the repository's data to be ready for training
+    '''
+    commits = []
+    i = 0
+    logger.info('Retrieving training data')
+    for commit in repository.commits:
+        if i > 30:
+            logger.info('Got 30 commits')
+            break
+
+        if (commit.commit_type == SYNTHETIC_CHANGE and commit.test_runs):
+            commits.append(commit)
+            i += 1
+
+    random.shuffle(commits)
+
+    validation_features = []
+    validation_labels = []
+
+    for commit in commits:
+        feature = commit_to_state(commit)
+        set_functions_altered_noise(feature)
+        set_tests_not_run_noise(feature)
+
+        label = commit_to_blame_matrix_labels(commit)
+
+        validation_features.append(feature)
+        validation_labels.append(label)
+
+    return (commits,
+            numpy.stack(validation_features),
+            numpy.stack(validation_labels))
+
+
+def commit_to_features(commit: Commit, add_noise: bool=False):
+    '''
+    Converts a commit to a list of features and labels
+    '''
+    features = []
+
+    for test_failure in commit.failed_test_results:
+        features.append(
+            test_failure_to_feature(test_failure, add_noise=add_noise))
+
+    return features
+
+
+def commit_to_labels(commit: Commit):
+    '''
+    Converts a commit to a list of features and labels
+    '''
+    labels = []
+
+    for test_failure in commit.failed_test_results:
+        labels.append(test_failure_to_label(test_failure))
+
+    return labels
+
+
+def to_tf_float(value):
+    '''
+    Utility function for wrapping a value as a int 64 for Tensorflow
+    '''
+    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
+
+
+def write_records(repository: Repository):
+    '''
+    Writes the training data to a TfRecord file
+    '''
+    writer = tf.python_io.TFRecordWriter(TF_RECORD_FILE)
+    print('Getting commits')
+    commits = get_commits(repository, synthetic=True)
+    print('Got {} of em'.format(len(commits)))
+
+    for commit in commits:
+        print('Doing commit: {}'.format(commit))
+        for failed_result in commit.failed_test_results:
+            feature = test_failure_to_feature(failed_result)
+            label = test_failure_to_label(failed_result)
+
+            feature = {'feature': to_tf_float(feature),
+                       'label': to_tf_float(label)}
+
+            # Serialize to string and write to file
+            example = tf.train.Example(
+                features=tf.train.Features(feature=feature))
+            writer.write(example.SerializeToString())
+
+    writer.close()
+
+
+def cache_test_results(repository: Repository):
+    '''
+    Writes the training data to a TfRecord file
+    '''
+    session = Session.object_session(repository)
+    print('Getting commits')
+    commits = get_commits(repository, synthetic=True)
+    print('Got {} of them'.format(len(commits)))
+
+    for commit in commits:
+        print('Doing commit: {} with {} failed tests'.format(
+            commit, len(commit.failed_test_results)))
+
+        for failed_result in commit.failed_test_results:
+            test_failure_to_feature(failed_result)
+            test_failure_to_label(failed_result)
+
+        session.commit()
+
+
+def tensor_feeder(filename, perform_shuffle=False, repeat_count=1, batch_size=1):
+    '''
+    Feeds TfRecords data into the Estimator
+
+    @returns: a two-element tuple organized as follows:
+    - The first element must be a dictionary in which each input feature is a
+      key. We have only one 'dense_1' here which is the input layer name for
+      the model.
+    - The second element is a list of labels for the training batch.
+    '''
+    def parse(serialized):
+        '''
+        Parses the TFRecords and returns them as tf Tensors
+        '''
+        feature = {
+            'feature': tf.FixedLenFeature([], tf.float32),
+            'label': tf.FixedLenFeature([], tf.float32)
+        }
+        example = tf.parse_single_example(serialized, feature)
+
+        return (dict({'dense_1': example['feature']}), example['label'])
+
+    dataset = tf.data.TFRecordDataset(filenames=filename)
+    # Parse the serialized data in the TFRecords files.
+    # This returns TensorFlow tensors for the image and labels.
+    dataset = dataset.map(parse)
+
+    if perform_shuffle:
+        # Randomizes input using a window of 256 elements (read into memory)
+        dataset = dataset.shuffle(buffer_size=256)
+
+    dataset = dataset.repeat(repeat_count)  # Repeats dataset this # times
+    dataset = dataset.batch(batch_size)  # Batch size to use
+    iterator = dataset.make_one_shot_iterator()
+    return iterator.get_next()
+
+
+def train_model_as_estimator(model):
+    '''
+    Convert our keras model into a Tensorflow Estimator so that we can easily
+    import TfRecords
+    '''
+    estimator = tf.keras.estimator.model_to_estimator(
+        keras_model=model, model_dir=get_output_dir())
+
+    # train_spec = tf.estimator.TrainSpec(
+    #     input_fn=lambda: tensor_feeder(
+    #         TF_RECORD_FILE,
+    #         perform_shuffle=True,
+    #         repeat_count=5,
+    #         batch_size=20),
+    #     max_steps=500)
+    # eval_spec = tf.estimator.EvalSpec(
+    #     input_fn=lambda: tensor_feeder(
+    #         TF_RECORD_FILE,
+    #         perform_shuffle=False,
+    #         batch_size=1))
+
+    estimator.train(input_fn=tensor_feeder(TF_RECORD_FILE))
+
