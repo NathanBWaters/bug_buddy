@@ -1,0 +1,14 @@
+{
+	"folders":
+	[
+		{
+			"path": "."
+		}
+	],
+    "settings":
+    {
+        "flake8lint": {
+            "python_interpreter": "/Users/NathanBWaters/code/virtualenv/bug_buddy/bin/python3",
+        }
+    },
+}

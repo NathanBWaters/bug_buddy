@@ -1,3 +1,7 @@
+bug_buddy.db
+
+model_output/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -102,3 +106,6 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# Mac
+*.DS_Store

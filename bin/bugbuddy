@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+from bug_buddy import commands
+
+
+def _train(args):
+    '''
+    Parses arguments and passes them to the train subcommand
+
+    @param args: the argparse arguments
+    '''
+    commands.train_command(args.path.strip())
+
+
+def _watch(args):
+    '''
+    Parses arguments and passes them to the train subcommand
+
+    @param args: the argparse arguments
+    '''
+    commands.watch_command(args.path.strip(), commit_only=args.commit_only)
+
+
+def _analyze(args):
+    '''
+    Parses arguments and passes them to the analyze subcommand
+
+    @param args: the argparse arguments
+    '''
+    commands.analyze_command(args.path.strip())
+
+
+def _do(args):
+    '''
+    Parses arguments and passes them to the analyze subcommand
+
+    @param args: the argparse arguments
+    '''
+    commands.do_command(args.path.strip())
+
+
+def _test(args):
+    '''
+    Parses arguments and passes them to the test subcommand
+
+    @param args: the argparse arguments
+    '''
+    commands.test_command(args.path.strip())
+
+
+def _delete(args):
+    '''
+    Parses arguments and passes them to the analyze subcommand
+
+    @param args: the argparse arguments
+    '''
+    commands.delete_command(args.path.strip())
+
+
+def _generate(args):
+    '''
+    Parses arguments and passes them to the generate subcommand
+
+    @param args: the argparse arguments
+    '''
+    commands.generate_command(
+        args.repository.strip(),
+        run_limit=int(args.num_runs) if args.num_runs else None)
+
+
+def _initialize(args):
+    '''
+    Parses arguments and passes them to the initialize subcommand
+
+    @param args: the argparse arguments
+    '''
+    commands.initialize_command(
+        src_path=args.path,
+        initialize_commands=args.initialize_commands,
+        test_commands=args.test_commands,
+        src_directory=args.source_directory,
+        commit_only=args.commit_only,
+        ignored_files=args.ignored_files or '')
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Utilities for working with BugBuddy')
+    subparsers = parser.add_subparsers()
+
+    ###################################
+    #  Generate SubCommand
+    ###################################
+    generate_command = subparsers.add_parser(
+        'generate',
+        description='Generate synthetic test runs',
+        help='The generate subcommand will kick off the process of retrieving '
+             'the historical data of a code repository')
+    generate_command.set_defaults(func=_generate)
+    generate_command.add_argument(
+        'repository',
+        type=str,
+        help='Name of the repository to generate synthetic data for')
+    generate_command.add_argument(
+        '-n',
+        '--num-runs',
+        type=str,
+        help='The number of synthetic edits and test runs you want to perform. '
+             'If blank, it will continuously run in perpetuity.')
+
+    ###################################
+    #  Initialize SubCommand
+    ###################################
+    initialize_command = subparsers.add_parser(
+        'initialize',
+        description='Initializes a repository given a path',
+        help=('The initialize subcommand will initialize a repository to be '
+              'used by bug_buddy'))
+    initialize_command.set_defaults(func=_initialize)
+    initialize_command.add_argument(
+        'path',
+        type=str,
+        help='Path to the repository you want to initialize')
+    initialize_command.add_argument(
+        '-i',
+        '--initialize-commands',
+        type=str,
+        help='Commands to initialize your project and set up its environment')
+    initialize_command.add_argument(
+        '-t',
+        '--test-commands',
+        type=str,
+        help='Set of commands to run the test from the root of your project')
+    initialize_command.add_argument(
+        '-s',
+        '--source-directory',
+        type=str,
+        help='The subdirectory of your project that contains your project files')
+    initialize_command.add_argument(
+        '-c',
+        '--commit-only',
+        action='store_true',
+        help='Only store commits rather than analyzing them')
+    initialize_command.add_argument(
+        '-if',
+        '--ignored-files',
+        type=str,
+        help='Comma delimited list of files that bug_buddy will ignore if it'
+             'is updated')
+
+    ###################################
+    #  Delete SubCommand
+    ###################################
+    delete_command = subparsers.add_parser(
+        'delete',
+        description=('Deletes a repository given a path from the database and '
+                     'deletes the bug_buddy branch'),
+        help=('Deletes a repository given a path from the database and deletes '
+              'the bug_buddy branch'))
+    delete_command.set_defaults(func=_delete)
+    delete_command.add_argument(
+        'path',
+        type=str,
+        help='Path to the repository you want to delete')
+
+    ###################################
+    #  Train SubCommand
+    ###################################
+    train_command = subparsers.add_parser(
+        'train',
+        description='Trains on the available data for a repository',
+        help=('Trains on the available data for a repository'))
+    train_command.set_defaults(func=_train)
+    train_command.add_argument(
+        'path',
+        type=str,
+        help='Path to the repository you want to train')
+
+    ###################################
+    #  Train SubCommand
+    ###################################
+    do_command = subparsers.add_parser(
+        'do',
+        description='does stuff',
+        help=('does stuff'))
+    do_command.set_defaults(func=_do)
+    do_command.add_argument(
+        'path',
+        type=str,
+        help='Path to the repository you want to do stuff to')
+
+    ###################################
+    #  Test SubCommand
+    ###################################
+    test_command = subparsers.add_parser(
+        'test',
+        description='tests a repository optimally',
+        help=('tests on the available data for a repository'))
+    test_command.set_defaults(func=_test)
+    test_command.add_argument(
+        'path',
+        type=str,
+        help='Path to the repository you want to test')
+
+    ###################################
+    #  Watch SubCommand
+    ###################################
+    watch_command = subparsers.add_parser(
+        'watch',
+        description='Watches a repository and records any changes',
+        help=('Watches a repository and records any changes'))
+    watch_command.set_defaults(func=_watch)
+    watch_command.add_argument(
+        'path',
+        type=str,
+        help='Path to the repository you want to watch')
+    watch_command.add_argument(
+        '-c',
+        '--commit-only',
+        action='store_true',
+        help='Only store commits rather than analyzing them')
+
+    args = parser.parse_args()
+    args.func(args)
