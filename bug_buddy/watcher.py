@@ -34,8 +34,8 @@ class ChangeWatchdog(PatternMatchingEventHandler):
         self.repository = repository
         self.commit_only = commit_only
 
-        self.score_card = Scorecard()
-        self.score_card.render(clear=True)
+        # self.score_card = Scorecard()
+        # self.score_card.render(clear=True)
 
         self.brain = Brain(repository)
 
@@ -72,8 +72,15 @@ class ChangeWatchdog(PatternMatchingEventHandler):
                                     s=total_time % 60))
                 session.commit()
 
-                # display the results in the cli output
-                # self.score_card.render(commit)
+                if not self.commit_only:
+                    run_all_tests(commit)
+
+                    for test_failure in commit.failed_test_results:
+                        predict_blame(test_failure)
+
+                    # display the results in the cli output
+                    # self.score_card.render(commit)
+                    commit.summary()
 
             else:
                 logger.info('Nothing was changed')
@@ -88,6 +95,7 @@ def watch(repository: Repository, commit_only: bool):
     set_bug_buddy_branch(repository)
     logger.info('Starting BugBuddy thingy')
     commit = get(session, Commit, id=1809)
+    # commit = get(session, Commit, id=2748)
 
     go_to_commit(repository, commit, force=True)
 
@@ -95,7 +103,10 @@ def watch(repository: Repository, commit_only: bool):
 
     for test_failure in commit.failed_test_results:
         predict_blame(test_failure)
+
+    session.commit()
     import pdb; pdb.set_trace()
+    commit.summary(blame=False)
 
     commit.summary()
 
