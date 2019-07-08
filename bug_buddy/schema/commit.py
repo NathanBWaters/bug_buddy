@@ -376,7 +376,9 @@ class Commit(Base):
             for blame in test_failure_result.blames:
                 function_to_test_map[blame.function].append(test_failure_result.test)
 
-        for function, failed_tests in function_to_test_map.items():
+        ordered_pairing = sorted(function_to_test_map.items(),
+                                 key=lambda kv: kv[0].id)
+        for function, failed_tests in ordered_pairing:
             print(' ' * (indent + 2) + str(function))
             for failed_test in failed_tests:
                 print(' ' * (indent + 4) + str(failed_test))

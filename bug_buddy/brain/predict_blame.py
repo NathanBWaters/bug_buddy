@@ -30,7 +30,6 @@ from bug_buddy.brain.utils import (
     # NUM_INPUT_COMMITS,
     # NUM_FEATURES
 )
-from bug_buddy.blaming import get_synthetic_children_commits
 from bug_buddy.constants import SYNTHETIC_CHANGE, TEST_OUTPUT_FAILURE
 from bug_buddy.db import get, session_manager, Session, get_all
 from bug_buddy.logger import logger
@@ -44,7 +43,7 @@ from bug_buddy.schema import (
 
 numpy.set_printoptions(suppress=True, precision=4, threshold=sys.maxsize)
 
-EXPERIMENT_ID = 4
+EXPERIMENT_ID = 5
 BLAME_PREDICTION_MODEL_FILE = 'predict_blame_{experiment_id}.h5'.format(
     experiment_id=EXPERIMENT_ID)
 
@@ -239,13 +238,7 @@ def test_failure_to_feature(test_failure: TestResult,
         return blame_features
 
     # get the previous commits of the synthetic commit
-    previous_commits = get_synthetic_children_commits(
-        test_failure.test_run.commit)
     commit = test_failure.test_run.commit
-
-    # add the current commit to the list of commits to look at in seeing if
-    # a function was altered since the test was passing
-    previous_commits.append(commit)
 
     test_result_vector = numpy.array([])
 
