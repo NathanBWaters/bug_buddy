@@ -46,6 +46,11 @@ def get_output_dir(file_name: str=None):
         os.path.dirname(os.path.dirname(os.path.dirname(
             os.path.realpath(__file__)))),
         'model_output')
+
+    # create the directory if it does not exist
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+
     if file_name:
         output_dir = os.path.join(output_dir, file_name)
 

@@ -1,4 +1,5 @@
 bug_buddy.db
+bug_buddy.db-journal
 
 model_output/*
 

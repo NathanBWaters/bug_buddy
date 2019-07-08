@@ -91,7 +91,7 @@ def watch(repository: Repository, commit_only: bool):
 
     go_to_commit(repository, commit, force=True)
 
-    run_all_tests(commit)
+    # run_all_tests(commit)
 
     for test_failure in commit.failed_test_results:
         predict_blame(test_failure)

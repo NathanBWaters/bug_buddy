@@ -148,6 +148,8 @@ def _initialize_repository(session,
     '''
     logger.info('Initializing repository at "{}"'.format(src_path))
     url = get_repository_url_from_path(src_path)
+    repository = get(session, Repository, url=url)
+
     name = get_repository_name_from_url(url)
     logger.info('Repository name is "{}" with url "{}"'.format(name, url))
     if not initialize_commands:
@@ -195,6 +197,18 @@ def _initialize_repository(session,
     return repository
 
 
+def _migrate_repository_to_new_path(session, repository, new_path):
+    '''
+    Migrating repository to new path.  This is necessary when the database has
+    one path stored for a repo but you're on a different machine.
+    '''
+    logger.info('Upating path of repository in database from {} to {}'
+                .format(repository.original_path, new_path))
+    repository.original_path = new_path
+    sync_mirror_repo(repository)
+    session.commit()
+
+
 def _get_repository_from_src_path(session, src_path: str):
     '''
     Returns the repository given a src_path
@@ -211,4 +225,6 @@ def _get_repository_from_src_path(session, src_path: str):
         else:
             logger.info('No worries!')
 
+    if src_path != repository.original_path:
+        _migrate_repository_to_new_path(session, repository, src_path)
     return repository

@@ -71,8 +71,8 @@ def synthetic_blame(commit: Commit,
                 [blame.diff for blame in children_test_failure_blames]))
 
             for faulty_diff in faulty_diffs:
-                logger.info('Assigning blame using child commit {} and diff {} '
-                            'for test failure: {}'
+                logger.info('Assigning blame using child commit {} and diff '
+                            '{} for test failure: {}'
                             .format(child_commit,
                                     faulty_diff,
                                     failed_test_result))

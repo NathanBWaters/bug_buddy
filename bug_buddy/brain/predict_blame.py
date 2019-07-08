@@ -6,10 +6,11 @@ import numpy
 import random
 import sys
 import tensorflow as tf
+import keras_metrics as km
+
 # importing Keras from Tensorflow is necessary for transforming a Keras
 # model into an Estimator
 import tensorflow as tensorflow
-tensorflow.enable_eager_execution()
 from tensorflow.train import AdamOptimizer
 from tensorflow.python.keras.models import Sequential, load_model
 from tensorflow.python.keras.callbacks import ModelCheckpoint
@@ -18,8 +19,6 @@ from tensorflow.python.keras.layers import (
     Activation,
     BatchNormalization,
     Dropout)
-
-
 from bug_buddy.brain.utils import (
     commit_to_state,
     get_commits,
@@ -41,10 +40,12 @@ from bug_buddy.schema import (
     Repository,
     TestResult)
 
+tensorflow.enable_eager_execution()
+
 
 numpy.set_printoptions(suppress=True, precision=4, threshold=sys.maxsize)
 
-EXPERIMENT_ID = 4
+EXPERIMENT_ID = 5
 BLAME_PREDICTION_MODEL_FILE = 'predict_blame_{experiment_id}.h5'.format(
     experiment_id=EXPERIMENT_ID)
 
@@ -74,6 +75,7 @@ def commit_generator(repository_id: int, batch_size: int, no_noise_epochs=200):
     with session_manager() as session:
         repository = get(session, Repository, id=repository_id)
         while True:
+            print('Gettin data')
             if epoch_num > no_noise_epochs:
                 add_noise = True
 
@@ -89,12 +91,18 @@ def commit_generator(repository_id: int, batch_size: int, no_noise_epochs=200):
             labels = []
             for failed_result in failed_test_results:
                 features.append(
-                    test_failure_to_feature(failed_result, add_noise=add_noise))
+                    numpy.array(
+                        test_failure_to_feature(failed_result,
+                                                add_noise=add_noise),
+                        copy=True))
 
-                labels.append(test_failure_to_label(failed_result))
+                labels.append(
+                    numpy.array(test_failure_to_label(failed_result),
+                                copy=True))
 
             epoch_num += 1
 
+            print('Yielding data')
             yield numpy.stack(features), numpy.stack(labels)
 
 
@@ -173,9 +181,9 @@ def get_model_schema():
 
     # Compile model
     model.compile(
-        loss='binary_crossentropy',
+        loss='categorical_crossentropy',
         optimizer=optimizer,
-        metrics=['accuracy'])
+        metrics=['accuracy', km.binary_precision(), km.binary_recall()])
 
     print(model.summary())
 
