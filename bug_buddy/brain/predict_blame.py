@@ -6,10 +6,10 @@ import numpy
 import random
 import sys
 import tensorflow as tf
-import keras_metrics as km
 
 # importing Keras from Tensorflow is necessary for transforming a Keras
 # model into an Estimator
+from keras import backend as K
 import tensorflow as tensorflow
 from tensorflow.train import AdamOptimizer
 from tensorflow.python.keras.models import Sequential, load_model
@@ -44,7 +44,7 @@ tensorflow.enable_eager_execution()
 
 numpy.set_printoptions(suppress=True, precision=4, threshold=sys.maxsize)
 
-EXPERIMENT_ID = 5
+EXPERIMENT_ID = 6
 BLAME_PREDICTION_MODEL_FILE = 'predict_blame_{experiment_id}.h5'.format(
     experiment_id=EXPERIMENT_ID)
 
@@ -74,14 +74,14 @@ def commit_generator(repository_id: int, batch_size: int, no_noise_epochs=200):
     with session_manager() as session:
         repository = get(session, Repository, id=repository_id)
         while True:
-            print('Gettin data')
+            print('Gettin 100 data')
             if epoch_num > no_noise_epochs:
                 add_noise = True
 
             failed_test_results = get_all(
                 session,
                 TestResult,
-                limit=1000,
+                limit=100,
                 random=True,
                 repository_id=repository.id,
                 status=TEST_OUTPUT_FAILURE)
@@ -180,9 +180,9 @@ def get_model_schema():
 
     # Compile model
     model.compile(
-        loss='categorical_crossentropy',
+        loss='binary_crossentropy',
         optimizer=optimizer,
-        metrics=['accuracy', km.binary_precision(), km.binary_recall()])
+        metrics=['accuracy', recall, precision, f1_score])
 
     print(model.summary())
 
@@ -205,6 +205,42 @@ def load_blame_model():
     return BLAME_PREDICTION_MODEL
 
 
+def precision(y_true, y_pred):
+    '''
+    Precision metric.
+    Only computes a batch-wise average of precision. Computes the precision, a
+    metric for multi-label classification of how many selected items are
+    relevant.
+    '''
+    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+    precision = true_positives / (predicted_positives + K.epsilon())
+    return precision
+
+
+def recall(y_true, y_pred):
+    '''
+    Recall metric.
+    Only computes a batch-wise average of recall. Computes the recall, a metric
+    for multi-label classification of how many relevant items are selected.
+    '''
+    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+    recall = true_positives / (possible_positives + K.epsilon())
+    return recall
+
+
+def f1_score(y_true, y_pred):
+    '''
+    Computes the F1 Score
+    Only computes a batch-wise average of recall. Computes the recall, a metric
+    for multi-label classification of how many relevant items are selected.
+    '''
+    p = precision(y_true, y_pred)
+    r = recall(y_true, y_pred)
+    return (2 * p * r) / (p + r + K.epsilon())
+
+
 def predict_blame(test_failure: TestResult):
     '''
     Predicts using the model
@@ -212,10 +248,14 @@ def predict_blame(test_failure: TestResult):
     model = load_blame_model()
 
     feature = test_failure_to_feature(test_failure)
-    prediction_vector = model.predict(numpy.array([feature, ]))
+    prediction_vector = model.predict(numpy.array([feature, ]))[0]
+
+    # label = test_failure_to_label(test_failure)
+    # y_true = tf.convert_to_tensor(label, numpy.float32);
+    # y_pred = tf.convert_to_tensor(prediction_vector, numpy.float32)
 
     # store the prediction
-    test_failure._blamed_function_prediction = prediction_vector[0]
+    test_failure._blamed_function_prediction = prediction_vector
 
     return prediction_vector
 
