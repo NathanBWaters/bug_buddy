@@ -7,6 +7,7 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 
 from bug_buddy.brain import Brain, predict_blame
+from bug_buddy.brain.utils import get_commits
 from bug_buddy.db import get, session_manager, Session
 from bug_buddy.git_utils import (
     go_to_commit,
@@ -94,21 +95,25 @@ def watch(repository: Repository, commit_only: bool):
     session = Session.object_session(repository)
     set_bug_buddy_branch(repository)
     logger.info('Starting BugBuddy thingy')
-    commit = get(session, Commit, id=1809)
-    # commit = get(session, Commit, id=2748)
 
-    go_to_commit(repository, commit, force=True)
+    commits = get_commits(repository, num_commits=5, synthetic=True)
 
-    # run_all_tests(commit)
+    for commit in commits:
+        # commit = get(session, Commit, id=1809)
+        # commit = get(session, Commit, id=2748)
 
-    for test_failure in commit.failed_test_results:
-        predict_blame(test_failure)
+        go_to_commit(repository, commit, force=True)
 
-    session.commit()
-    import pdb; pdb.set_trace()
-    commit.summary(blame=False)
+        # run_all_tests(commit)
 
-    commit.summary()
+        for test_failure in commit.failed_test_results:
+            predict_blame(test_failure)
+
+        session.commit()
+        # import pdb; pdb.set_trace()
+        # commit.summary(blame=False)
+
+        commit.summary()
 
 
 def _watch(repository: Repository, commit_only: bool):
