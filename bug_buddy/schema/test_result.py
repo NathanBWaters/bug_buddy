@@ -98,7 +98,7 @@ class TestResult(Base):
                     self._blamed_function_prediction)
             elif self._blamed_function_prediction is not None:
                 self._blamed_function_prediction_numpy = numpy.fromstring(
-                    self._blamed_function_prediction)
+                    self._blamed_function_prediction, dtype=numpy.float32)
             else:
                 return None
 

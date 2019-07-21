@@ -6,10 +6,11 @@ import numpy
 import random
 import sys
 import tensorflow as tf
+
 # importing Keras from Tensorflow is necessary for transforming a Keras
 # model into an Estimator
+from keras import backend as K
 import tensorflow as tensorflow
-tensorflow.enable_eager_execution()
 from tensorflow.train import AdamOptimizer
 from tensorflow.python.keras.models import Sequential, load_model
 from tensorflow.python.keras.callbacks import ModelCheckpoint
@@ -18,8 +19,6 @@ from tensorflow.python.keras.layers import (
     Activation,
     BatchNormalization,
     Dropout)
-
-
 from bug_buddy.brain.utils import (
     commit_to_state,
     get_commits,
@@ -30,7 +29,6 @@ from bug_buddy.brain.utils import (
     # NUM_INPUT_COMMITS,
     # NUM_FEATURES
 )
-from bug_buddy.blaming import get_synthetic_children_commits
 from bug_buddy.constants import SYNTHETIC_CHANGE, TEST_OUTPUT_FAILURE
 from bug_buddy.db import get, session_manager, Session, get_all
 from bug_buddy.logger import logger
@@ -41,10 +39,12 @@ from bug_buddy.schema import (
     Repository,
     TestResult)
 
+tensorflow.enable_eager_execution()
+
 
 numpy.set_printoptions(suppress=True, precision=4, threshold=sys.maxsize)
 
-EXPERIMENT_ID = 4
+EXPERIMENT_ID = 8
 BLAME_PREDICTION_MODEL_FILE = 'predict_blame_{experiment_id}.h5'.format(
     experiment_id=EXPERIMENT_ID)
 
@@ -74,13 +74,14 @@ def commit_generator(repository_id: int, batch_size: int, no_noise_epochs=200):
     with session_manager() as session:
         repository = get(session, Repository, id=repository_id)
         while True:
+            print('Gettin 100 data')
             if epoch_num > no_noise_epochs:
                 add_noise = True
 
             failed_test_results = get_all(
                 session,
                 TestResult,
-                limit=1000,
+                limit=100,
                 random=True,
                 repository_id=repository.id,
                 status=TEST_OUTPUT_FAILURE)
@@ -89,12 +90,18 @@ def commit_generator(repository_id: int, batch_size: int, no_noise_epochs=200):
             labels = []
             for failed_result in failed_test_results:
                 features.append(
-                    test_failure_to_feature(failed_result, add_noise=add_noise))
+                    numpy.array(
+                        test_failure_to_feature(failed_result,
+                                                add_noise=add_noise),
+                        copy=True))
 
-                labels.append(test_failure_to_label(failed_result))
+                labels.append(
+                    numpy.array(test_failure_to_label(failed_result),
+                                copy=True))
 
             epoch_num += 1
 
+            print('Yielding data')
             yield numpy.stack(features), numpy.stack(labels)
 
 
@@ -175,7 +182,7 @@ def get_model_schema():
     model.compile(
         loss='binary_crossentropy',
         optimizer=optimizer,
-        metrics=['accuracy'])
+        metrics=['accuracy', recall, precision, f1_score])
 
     print(model.summary())
 
@@ -198,6 +205,42 @@ def load_blame_model():
     return BLAME_PREDICTION_MODEL
 
 
+def precision(y_true, y_pred):
+    '''
+    Precision metric.
+    Only computes a batch-wise average of precision. Computes the precision, a
+    metric for multi-label classification of how many selected items are
+    relevant.
+    '''
+    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+    precision = true_positives / (predicted_positives + K.epsilon())
+    return precision
+
+
+def recall(y_true, y_pred):
+    '''
+    Recall metric.
+    Only computes a batch-wise average of recall. Computes the recall, a metric
+    for multi-label classification of how many relevant items are selected.
+    '''
+    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+    recall = true_positives / (possible_positives + K.epsilon())
+    return recall
+
+
+def f1_score(y_true, y_pred):
+    '''
+    Computes the F1 Score
+    Only computes a batch-wise average of recall. Computes the recall, a metric
+    for multi-label classification of how many relevant items are selected.
+    '''
+    p = precision(y_true, y_pred)
+    r = recall(y_true, y_pred)
+    return (2 * p * r) / (p + r + K.epsilon())
+
+
 def predict_blame(test_failure: TestResult):
     '''
     Predicts using the model
@@ -205,10 +248,14 @@ def predict_blame(test_failure: TestResult):
     model = load_blame_model()
 
     feature = test_failure_to_feature(test_failure)
-    prediction_vector = model.predict(numpy.array([feature, ]))
+    prediction_vector = model.predict(numpy.array([feature, ]))[0]
+
+    # label = test_failure_to_label(test_failure)
+    # y_true = tf.convert_to_tensor(label, numpy.float32);
+    # y_pred = tf.convert_to_tensor(prediction_vector, numpy.float32)
 
     # store the prediction
-    test_failure._blamed_function_prediction = prediction_vector[0]
+    test_failure._blamed_function_prediction = prediction_vector
 
     return prediction_vector
 
@@ -239,13 +286,7 @@ def test_failure_to_feature(test_failure: TestResult,
         return blame_features
 
     # get the previous commits of the synthetic commit
-    previous_commits = get_synthetic_children_commits(
-        test_failure.test_run.commit)
     commit = test_failure.test_run.commit
-
-    # add the current commit to the list of commits to look at in seeing if
-    # a function was altered since the test was passing
-    previous_commits.append(commit)
 
     test_result_vector = numpy.array([])
 

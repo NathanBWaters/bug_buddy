@@ -2,7 +2,6 @@
 CLI output for visualizing the results of the ChangeWatchdog
 '''
 from blessings import Terminal
-import emoji
 
 from bug_buddy.schema import Commit
 
@@ -44,8 +43,8 @@ class Scorecard(Terminal):
             print("")
             print('    🐞 ' + self.underline("BugBuddy"))
 
-            with self.location(x=self.width - 30, y=1):
-                print('Score: {}'.format(self.score))
+            # with self.location(x=self.width - 30, y=1):
+            #     print('Score: {}'.format(self.score))
 
             print('')
             print('-' * self.width)
