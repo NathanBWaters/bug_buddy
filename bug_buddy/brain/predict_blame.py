@@ -44,7 +44,7 @@ tensorflow.enable_eager_execution()
 
 numpy.set_printoptions(suppress=True, precision=4, threshold=sys.maxsize)
 
-EXPERIMENT_ID = 6
+EXPERIMENT_ID = 9
 BLAME_PREDICTION_MODEL_FILE = 'predict_blame_{experiment_id}.h5'.format(
     experiment_id=EXPERIMENT_ID)
 
@@ -74,14 +74,14 @@ def commit_generator(repository_id: int, batch_size: int, no_noise_epochs=200):
     with session_manager() as session:
         repository = get(session, Repository, id=repository_id)
         while True:
-            print('Gettin 100 data')
+            print('Gettin 400 data')
             if epoch_num > no_noise_epochs:
                 add_noise = True
 
             failed_test_results = get_all(
                 session,
                 TestResult,
-                limit=100,
+                limit=400,
                 random=True,
                 repository_id=repository.id,
                 status=TEST_OUTPUT_FAILURE)
@@ -135,7 +135,7 @@ def train_model_keras(repository, model):
     # Fit the model
     model.fit_generator(
         generator,
-        epochs=800,
+        epochs=5000,
         callbacks=callbacks,
         steps_per_epoch=1,
         verbose=1)
@@ -180,7 +180,7 @@ def get_model_schema():
 
     # Compile model
     model.compile(
-        loss='binary_crossentropy',
+        loss='categorical_crossentropy',
         optimizer=optimizer,
         metrics=['accuracy', recall, precision, f1_score])
 
