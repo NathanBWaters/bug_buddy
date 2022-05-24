@@ -66,7 +66,7 @@ sphinxcontrib-log-cabinet==1.0.0
 sphinxcontrib-websupport==1.1.0
 SQLAlchemy==1.2.12
 tensorboard==1.12.2
-tensorflow==1.12.0
+tensorflow==2.6.4
 termcolor==1.1.0
 toml==0.9.6
 tox==3.4.0
